@@ -1,0 +1,90 @@
+[submodule "analyzemft/analyzeMFT"]
+	path = analyzemft/analyzeMFT
+	url = https://github.com/dkovar/analyzeMFT.git
+[submodule "flask-unsign/Flask-Unsign"]
+	path = flask-unsign/Flask-Unsign
+	url = https://github.com/Paradoxis/Flask-Unsign.git
+[submodule "ftpserver/docker-ftp-server"]
+	path = ftpserver/docker-ftp-server
+	url = https://github.com/garethflowers/docker-ftp-server.git
+[submodule "grpcurl"]
+	path = grpcurl
+	url = https://github.com/fullstorydev/grpcurl.git
+[submodule "httpx"]
+	path = httpx
+	url = https://github.com/projectdiscovery/httpx.git
+[submodule "impacket"]
+	path = impacket
+	url = https://github.com/fortra/impacket.git
+[submodule "kiterunner/kiterunner"]
+	path = kiterunner/kiterunner
+	url = https://github.com/assetnote/kiterunner.git
+[submodule "LinkFinder"]
+	path = LinkFinder
+	url = https://github.com/GerbenJavado/LinkFinder.git
+[submodule "mft/mft"]
+	path = mft/mft
+	url = https://github.com/omerbenamram/mft.git
+[submodule "naabu"]
+	path = naabu
+	url = https://github.com/projectdiscovery/naabu.git
+[submodule "nginxpwner"]
+	path = nginxpwner
+	url = https://github.com/stark0de/nginxpwner
+[submodule "nosql-attack-suite/NoSQL-Attack-Suite"]
+	path = nosql-attack-suite/NoSQL-Attack-Suite
+	url = https://github.com/C4l1b4n/NoSQL-Attack-Suite.git
+[submodule "nuclei"]
+	path = nuclei
+	url = https://github.com/projectdiscovery/nuclei.git
+[submodule "oxml_xxe"]
+	path = oxml_xxe
+	url = https://github.com/BuffaloWill/oxml_xxe.git
+[submodule "pickora/Pickora"]
+	path = pickora/Pickora
+	url = https://github.com/splitline/Pickora.git
+[submodule "python-xasm/python-xasm"]
+	path = python-xasm/python-xasm
+	url = https://github.com/rocky/python-xasm.git
+[submodule "python-xasm/python-xdis"]
+	path = python-xasm/python-xdis
+	url = https://github.com/rocky/python-xdis.git
+[submodule "Ropper"]
+	path = Ropper
+	url = https://github.com/sashs/Ropper
+[submodule "SecretFinder"]
+	path = SecretFinder
+	url = https://github.com/m4ll0k/SecretFinder.git
+[submodule "slurp"]
+	path = slurp
+	url = https://github.com/0xbharath/slurp.git
+[submodule "socialhunter/socialhunter"]
+	path = socialhunter/socialhunter
+	url = https://github.com/utkusen/socialhunter
+[submodule "subfinder"]
+	path = subfinder
+	url = https://github.com/projectdiscovery/subfinder.git
+[submodule "sublist3r/Sublist3r"]
+	path = sublist3r/Sublist3r
+	url = https://github.com/aboul3la/Sublist3r
+[submodule "tinja/TInjA"]
+	path = tinja/TInjA
+	url = https://github.com/Hackmanit/TInjA.git
+[submodule "tplmap/tplmap"]
+	path = tplmap/tplmap
+	url = https://github.com/epinna/tplmap.git
+[submodule "trufflehog"]
+	path = trufflehog
+	url = https://github.com/trufflesecurity/trufflehog.git
+[submodule "uncompyle6/python-uncompyle6"]
+	path = uncompyle6/python-uncompyle6
+	url = https://github.com/rocky/python-uncompyle6.git
+[submodule "xnlinkfinder/xnLinkFinder"]
+	path = xnlinkfinder/xnLinkFinder
+	url = https://github.com/xnl-h4ck3r/xnLinkFinder
+[submodule "xsstrike/XSStrike"]
+	path = xsstrike/XSStrike
+	url = https://github.com/s0md3v/XSStrike.git
+[submodule "xxetester/xxetester"]
+	path = xxetester/xxetester
+	url = https://github.com/d1y1n/xxetester.git
