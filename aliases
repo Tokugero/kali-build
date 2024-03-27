@@ -1,37 +1,39 @@
+alias analyzemft='docker run --rm -it -v $(pwd):/app/target analyzemft' #https://github.com/dkovar/analyzeMFT
+alias flask-unsign='docker run --rm -it -v $(pwd):/app/target flask-unsign' #https://github.com/Paradoxis/Flask-Unsign
 alias ftpup='docker run --rm -it -v $(pwd):/home/user -p 20-21:20-21 -p 40000-40009 -e FTP_USER=anonymous ftpserver'
+alias grpcurl='docker run --rm -it -v $(pwd):/app/target grpcurl' #https://github.com/fullstorydev/grpcurl
 alias httpx='docker run --rm -it -v $(pwd):/app/target httpx' #https://github.com/projectdiscovery/httpx
 alias impacket='docker run --rm -it -v $(pwd):/currentdir impacket'
 alias krbrute='docker run --rm -it -v /usr/share/wordlists:/usr/share/wordlists kr brute -x 20 -j 50'
 alias krscan='docker run --rm -it -v /usr/share/wordlists:/usr/share/wordlists kr scan -x 20 -j 50'
 alias linkfinder='docker run --rm -it -v $(pwd):/app/target linkfinder' #https://github.com/GerbenJavado/LinkFinder
+alias mft='docker run --rm -it -v $(pwd):/app/target mft' #https://github.com/omerbenamram/mft
+alias mftdump='docker run --rm -it -v $(pwd):/app/target mftdump' #https://github.com/mcs6502/mftdump
 alias naabu='docker run --rm -it -v $(pwd):/app/target naabu' #https://github.com/projectdiscovery/naabu/tree/main
 alias nginxpwner='docker run --rm -it -v $(pwd):/tmp nginxpwner python3 nginxpwner.py'
+alias nosql-loginbypass='docker run --rm -it nosql-attack-suite nosql-login-bypass.py' #https://github.com/C4l1b4n/NoSQL-Attack-Suite
+alias nosql-loginenum='docker run --rm -it nosql-attack-suite nosql-login-enum.py' #https://github.com/C4l1b4n/NoSQL-Attack-Suite
 alias nuclei='docker run --rm -it -v $(pwd):/app/target nuclei' #https://github.com/projectdiscovery/nuclei
 alias oxml_xxe='echo "EXPOSING PORT 4567" && docker run --rm -it -p 4567:4567 oxml_xxe' 
-alias rustscan='docker run -it --rm --name rustscan rustscan/rustscan:1.10.0'
+alias pwncat='docker run --rm -it -v $(pwd):/app/target pwncat' #https://github.com/calebstewart/pwncat
+alias pwncat-lvnp='docker run --rm -it -v $(pwd):/app/target -p 9080:9080 pwncat -l -p 9080' #https://github.com/calebstewart/pwncat
+alias pyc-convert='docker run --rm -it -v $(pwd):/app/target python-xasm pyc-convert' #https://github.com/rocky/python-xasm
+alias pyc-xasm='docker run --rm -it -v $(pwd):/app/target python-xasm pyc-xasm' #https://github.com/rocky/python-xasm
+alias pydisasm='docker run --rm -it -v $(pwd):/app/target python-xasm pydisasm' #https://github.com/rocky/python-xasm
+alias ropper='docker run --rm -it -v $(pwd):/app/target ropper' #https://github.com/sashs/Ropper
+alias rustscan='docker run -it --rm -v $(pwd):/app/target rustscan' #https://github.com/RustScan/RustScan
 alias secretfinder='docker run --rm -it -v $(pwd):/app/target secretfinder' #https://github.com/m4ll0k/SecretFinder
 alias slurp='docker run --rm -it -v $(pwd):/app/target slurp slurp' #https://github.com/0xbharath/slurp
 alias socialhunter='docker run --rm -it -v $(pwd):/app/target socialhunter' #https://github.com/utkusen/socialhunter
-alias flask-unsign='docker run --rm -it -v $(pwd):/app/target flask-unsign' #https://github.com/Paradoxis/Flask-Unsign
-alias ropper='docker run --rm -it -v $(pwd):/app/target ropper' #https://github.com/sashs/Ropper
-alias uncompyle='docker run --rm -it -v $(pwd):/app/target uncompyle6' #https://github.com/rocky/python-uncompyle6/
-alias pydisasm='docker run --rm -it -v $(pwd):/app/target python-xasm pydisasm' #https://github.com/rocky/python-xasm
-alias pyc-xasm='docker run --rm -it -v $(pwd):/app/target python-xasm pyc-xasm' #https://github.com/rocky/python-xasm
-alias xsstrike='docker run --rm -it -v $(pwd):/app/target xsstrike' #https://github.com/s0md3v/XSStrike
-alias pyc-convert='docker run --rm -it -v $(pwd):/app/target python-xasm pyc-convert' #https://github.com/rocky/python-xasm
-alias nosql-loginbypass='docker run --rm -it nosql-attack-suite nosql-login-bypass.py' #https://github.com/C4l1b4n/NoSQL-Attack-Suite
-alias nosql-loginenum='docker run --rm -it nosql-attack-suite nosql-login-enum.py' #https://github.com/C4l1b4n/NoSQL-Attack-Suite
-alias tinja='docker run --rm -it -v $(pwd):/app/target tinja' #https://github.com/Hackmanit/TInjA
-alias grpcurl='docker run --rm -it -v $(pwd):/app/target grpcurl' #https://github.com/fullstorydev/grpcurl
-alias analyzemft='docker run --rm -it -v $(pwd):/app/target analyzemft' #https://github.com/dkovar/analyzeMFT
-alias tplmap='docker run --rm -it -v $(pwd):/app/target tplmap' #https://github.com/epinna/tplmap
-alias mftdump='docker run --rm -it -v $(pwd):/app/target mftdump' #https://github.com/mcs6502/mftdump
 alias subfinder='docker run --rm -it -v $(pwd):/app/target subfinder' #https://github.com/projectdiscovery/subfinder
-alias mft='docker run --rm -it -v $(pwd):/app/target mft' #https://github.com/omerbenamram/mft
 alias sublist3r='docker run --rm -it -v $(pwd):/app/target sublist3r' #https://github.com/aboul3la/Sublist3r
+alias tinja='docker run --rm -it -v $(pwd):/app/target tinja' #https://github.com/Hackmanit/TInjA
+alias tplmap='docker run --rm -it -v $(pwd):/app/target tplmap' #https://github.com/epinna/tplmap
 alias trufflehog='docker run --rm -it -v $(pwd):/app/target trufflehog' #https://github.co/trufflesecurity/trufflehog
+alias uncompyle='docker run --rm -it -v $(pwd):/app/target uncompyle6' #https://github.com/rocky/python-uncompyle6/
 alias webdavup='docker run --rm -it -p $2:$2 wsgidav --host=$1 --port=$2 --root=/tmp --auth=anonymous'
 alias xnlinkfinder='docker run --rm -it -v $(pwd):/app/target xnlinkfinder' #https://github.com/xnl-h4ck3r/xnLinkFinder
+alias xsstrike='docker run --rm -it -v $(pwd):/app/target xsstrike' #https://github.com/s0md3v/XSStrike
 alias xxetester='docker run --rm -it -v $(pwd):/app/target xxetester'
 
 upgradecontainers() { #Iterates through ~/.local/build and pulls and builds all containers

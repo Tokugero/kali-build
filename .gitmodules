@@ -88,3 +88,9 @@
 [submodule "xxetester/xxetester"]
 	path = xxetester/xxetester
 	url = https://github.com/d1y1n/xxetester.git
+[submodule "rustscan/RustScan"]
+	path = rustscan/RustScan
+	url = https://github.com/RustScan/RustScan.git
+[submodule "pwncat/pwncat"]
+	path = pwncat/pwncat
+	url = https://github.com/calebstewart/pwncat.git
