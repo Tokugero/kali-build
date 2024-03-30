@@ -1,5 +1,6 @@
 alias analyzemft='docker run --rm -it -v $(pwd):/app/target analyzemft' #https://github.com/dkovar/analyzeMFT
-alias flask-unsign='docker run --rm -it -v $(pwd):/app/target flask-unsign' #https://github.com/Paradoxis/Flask-Unsign
+alias flask-unsign='docker run --rm -it -v /usr/share:/usr/share -v $(pwd):/app/target flask-unsign' #https://github.com/Paradoxis/Flask-Unsign
+alias firebaseexploiter='docker run --rm -it -v $(pwd):/app/target firebaseexploiter' #https://github.com/securebinary/firebaseExploiter?tab=readme-ov-file#installation
 alias ftpup='docker run --rm -it -v $(pwd):/home/user -p 20-21:20-21 -p 40000-40009 -e FTP_USER=anonymous ftpserver'
 alias grpcurl='docker run --rm -it -v $(pwd):/app/target grpcurl' #https://github.com/fullstorydev/grpcurl
 alias httpx='docker run --rm -it -v $(pwd):/app/target httpx' #https://github.com/projectdiscovery/httpx
@@ -24,6 +25,7 @@ alias ropper='docker run --rm -it -v $(pwd):/app/target ropper' #https://github.
 alias rustscan='docker run -it --rm -v $(pwd):/app/target rustscan' #https://github.com/RustScan/RustScan
 alias secretfinder='docker run --rm -it -v $(pwd):/app/target secretfinder' #https://github.com/m4ll0k/SecretFinder
 alias slurp='docker run --rm -it -v $(pwd):/app/target slurp slurp' #https://github.com/0xbharath/slurp
+alias sherlock='docker run --rm -it -v $(pwd):/app/target sherlock' #https://github.com/sherlock-project/sherlock
 alias socialhunter='docker run --rm -it -v $(pwd):/app/target socialhunter' #https://github.com/utkusen/socialhunter
 alias subfinder='docker run --rm -it -v $(pwd):/app/target subfinder' #https://github.com/projectdiscovery/subfinder
 alias sublist3r='docker run --rm -it -v $(pwd):/app/target sublist3r' #https://github.com/aboul3la/Sublist3r

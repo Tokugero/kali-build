@@ -94,3 +94,9 @@
 [submodule "pwncat/pwncat"]
 	path = pwncat/pwncat
 	url = https://github.com/calebstewart/pwncat.git
+[submodule "sherlock/sherlock"]
+	path = sherlock/sherlock
+	url = https://github.com/sherlock-project/sherlock.git
+[submodule "firebaseexploiter/firebaseExploiter"]
+	path = firebaseexploiter/firebaseExploiter
+	url = https://github.com/securebinary/firebaseExploiter.git
