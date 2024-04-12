@@ -8,6 +8,7 @@ alias impacket='docker run --rm -it -v $(pwd):/currentdir impacket'
 alias krbrute='docker run --rm -it -v /usr/share/wordlists:/usr/share/wordlists kr brute -x 20 -j 50'
 alias krscan='docker run --rm -it -v /usr/share/wordlists:/usr/share/wordlists kr scan -x 20 -j 50'
 alias linkfinder='docker run --rm -it -v $(pwd):/app/target linkfinder' #https://github.com/GerbenJavado/LinkFinder
+alias ligolo-ng='docker run --rm -it -v $(pwd):/app/target --net=host ligolo-ng' #https://github.com/nicocha30/ligolo-ng
 alias mft='docker run --rm -it -v $(pwd):/app/target mft' #https://github.com/omerbenamram/mft
 alias mftdump='docker run --rm -it -v $(pwd):/app/target mftdump' #https://github.com/mcs6502/mftdump
 alias naabu='docker run --rm -it -v $(pwd):/app/target naabu' #https://github.com/projectdiscovery/naabu/tree/main

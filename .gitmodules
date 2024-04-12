@@ -100,3 +100,6 @@
 [submodule "firebaseexploiter/firebaseExploiter"]
 	path = firebaseexploiter/firebaseExploiter
 	url = https://github.com/securebinary/firebaseExploiter.git
+[submodule "ligolo-ng/ligolo-ng"]
+	path = ligolo-ng/ligolo-ng
+	url = https://github.com/nicocha30/ligolo-ng.git
