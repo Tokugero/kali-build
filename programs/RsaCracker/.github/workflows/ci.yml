@@ -1,0 +1,222 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - ".github/**"
+      - "!.github/workflows/ci.yml"
+      - ".gitignore"
+      - "codecov.yml"
+      - "grcov.yml"
+      - "LICENSE*"
+      - "README.md"
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - ".github/**"
+      - "!.github/workflows/ci.yml"
+      - ".gitignore"
+      - "codecov.yml"
+      - "grcov.yml"
+      - "LICENSE*"
+      - "README.md"
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Stable toolchain with rustfmt
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check coding style
+        run: cargo fmt --check --all
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Stable toolchain with clippy
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Lint
+        run: cargo clippy --all-targets  --all-features -- -D warnings
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUSTDOCFLAGS: "-Dwarnings"
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo doc --no-deps
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+
+      - name: Test
+        run: cargo nextest run --all-features --lib --bins --test keys
+
+  ctf-challenges:
+    name: CTF challenges
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+
+      - name: Test
+        run: cargo nextest run --release --all-features --test "*ctf*" --test crypton
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+
+      - name: Tests
+        run: cargo nextest run --all-features --lib --bins --test keys
+        env:
+          CARGO_INCREMENTAL: "0"
+          RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests"
+          RUSTDOCFLAGS: "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests"
+
+      - name: Grcov
+        id: coverage
+        uses: actions-rs/grcov@v0.1
+        with:
+          config: grcov.yml
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ${{ steps.coverage.outputs.report }}
+          flags: rust
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  build:
+    name: Build
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: Swatinem/rust-cache@v2
+
+      # msys2 required by rug on windows
+      - name: Setup msys2 (windows)
+        uses: msys2/setup-msys2@v2
+        if: matrix.os == 'windows-latest'
+        with:
+          install: >-
+            base-devel
+            pacman-mirrors
+            diffutils
+            m4
+            make
+            openssl
+            openssl-devel
+          pacboy: >-
+            gcc:p
+            rust:p
+
+      # Only for windows
+      - name: Msys2 build (windows)
+        if: matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: |
+          cargo build
+
+      - name: Build
+        if: matrix.os != 'windows-latest'
+        run: cargo build
+
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: jpribyl/action-docker-layer-caching@v0.1.1
+        continue-on-error: true
+
+      - name: Build the Docker image
+        run: DOCKER_BUILDKIT=1 docker build . --file Dockerfile -t rsacracker
+
+      - name: Test the Docker image
+        run: docker run --rm -v $PWD:/data rsacracker -n 323 --attack small_prime --factors

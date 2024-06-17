@@ -41,10 +41,10 @@ alias xxetester='docker run --rm -it -v $(pwd):/app/target xxetester'
 
 upgradecontainers() { #Iterates through ~/.local/build and pulls and builds all containers
     PREV_DIR=$OLDPWD
-    cd ~/.local/build;
+    cd ~/.local/build/programs;
     git pull;
     git submodule update --remote;
-    for build in ~/.local/build/*; do
+    for build in ~/.local/build/programs/*; do
         if [[ -d $build ]]; then
             cd $build
             docker build -t $(basename $build | tr "[:upper:]" "[:lower:]") . & #Docker will only build lowercase images

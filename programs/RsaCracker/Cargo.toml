@@ -1,0 +1,62 @@
+[package]
+name = "rsacracker"
+version = "0.6.6"
+edition = "2021"
+authors = ["skyf0l <skyf0lmails@proton.me>"]
+description = "Powerful RSA cracker for CTFs. Supports RSA, X509, OPENSSH in PEM and DER formats."
+repository = "https://github.com/skyf0l/RsaCracker"
+license = "MIT OR Apache-2.0"
+categories = ["cryptography", "mathematics"]
+keywords = ["rsa", "cracker", "ctf", "crypto", "cryptography"]
+include = [
+  "/src/**/*",
+  "/Cargo.toml",
+  "/LICENSE*",
+  "/README.md",
+]
+readme = "README.md"
+
+[workspace]
+members = [
+  "tools/gen_keys",
+]
+
+[features]
+default = ["parallel"]
+parallel = ["tokio", "mpsc", "num_cpus"]
+
+[profile.dev]
+opt-level = 1
+
+[profile.test]
+opt-level = 2
+
+[profile.release]
+codegen-units = 1
+lto = true
+
+[dependencies]
+thiserror = "1"
+lazy_static = "1"
+clap = { version = "4", features = ["derive", "env"] }
+main_error = "0.1"
+primal = "0.3"
+ecm = { version = "0.4", features = ["progress-bar"] }
+openssl = "0.10"
+base-x = "0.2"
+display_bytes = "0.2"
+ssh-key = { version = "0.6", features = ["encryption"] }
+tokio = { version = "1.29", features = ["rt", "rt-multi-thread"], optional = true }
+mpsc = { version = "0.2", optional = true }
+num_cpus = { version = "1.15", optional = true }
+update-informer = "1"
+indicatif = "0.17"
+itertools = "0.12"
+discrete-logarithm = "0.1"
+base64 = "0.21"
+
+[dependencies.rug]
+version = "1"
+default-features = false
+features = ["integer", "rand", "std"]
+
