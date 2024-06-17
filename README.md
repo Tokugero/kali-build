@@ -14,6 +14,10 @@ Note that the structure of this is still very raw, as of this commit I am undeci
 1. Source ./aliases from favorite profile configuration
 1. `upgradecontainers`
 
+## Links
+1. .bash_aliases > your favorite home dir
+1. .ctfskel > ~/ctf/.skel
+
 ## Use
 You can assume that, if the binary requires files to input/output, they will usually either be mounted in the working directory of the container or in `target/$(current_directory)` so they can be used as if actually a binary, or prepending `target/` to the file. The entrypoint will (hopefully) always be the built artifact from the repo, so simply follow the repos instructions to use and cross your fingers.
 

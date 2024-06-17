@@ -1,0 +1,4 @@
+jupyterlab
+paramiko
+ipyparallel
+pwntools
