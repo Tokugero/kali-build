@@ -103,3 +103,6 @@
 [submodule "ligolo-ng/ligolo-ng"]
 	path = ligolo-ng/ligolo-ng
 	url = https://github.com/nicocha30/ligolo-ng.git
+[submodule "RsaCracker"]
+	path = RsaCracker
+	url = https://github.com/skyf0l/RsaCracker.git
