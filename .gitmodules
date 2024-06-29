@@ -106,3 +106,6 @@
 [submodule "RsaCracker"]
 	path = programs/gRsaCracker
 	url = https://github.com/skyf0l/RsaCracker.git
+[submodule "programs/jwt-tool"]
+	path = programs/jwt-tool
+	url = https://github.com/ticarpi/jwt_tool.git

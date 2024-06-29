@@ -4,7 +4,7 @@ alias firebaseexploiter='docker run --rm -it -v $(pwd):/app/target firebaseexplo
 alias ftpup='docker run --rm -it -v $(pwd):/home/user -p 20-21:20-21 -p 40000-40009 -e FTP_USER=anonymous ftpserver'
 alias grpcurl='docker run --rm -it -v $(pwd):/app/target grpcurl' #https://github.com/fullstorydev/grpcurl
 alias httpx='docker run --rm -it -v $(pwd):/app/target httpx' #https://github.com/projectdiscovery/httpx
-alias impacket='docker run --rm -it -v $(pwd):/currentdir impacket'
+alias impacket='docker run --rm -it -v $(pwd):/currentdir impacket -c'
 alias krbrute='docker run --rm -it -v /usr/share/wordlists:/usr/share/wordlists kr brute -x 20 -j 50'
 alias krscan='docker run --rm -it -v /usr/share/wordlists:/usr/share/wordlists kr scan -x 20 -j 50'
 alias linkfinder='docker run --rm -it -v $(pwd):/app/target linkfinder' #https://github.com/GerbenJavado/LinkFinder
@@ -38,6 +38,8 @@ alias webdavup='docker run --rm -it -p $2:$2 wsgidav --host=$1 --port=$2 --root=
 alias xnlinkfinder='docker run --rm -it -v $(pwd):/app/target xnlinkfinder' #https://github.com/xnl-h4ck3r/xnLinkFinder
 alias xsstrike='docker run --rm -it -v $(pwd):/app/target xsstrike' #https://github.com/s0md3v/XSStrike
 alias xxetester='docker run --rm -it -v $(pwd):/app/target xxetester'
+alias jwt-tool='docker run --rm -it --network "host" -v ${HOME}/.jwt_tool:/root/.jwt_tool -v $(pwd):/tmp jwt-tool'
+alias localtunnel='docker run --rm -it --network "host" localtunnel 8080'
 
 upgradecontainers() { #Iterates through ~/.local/build and pulls and builds all containers
     PREV_DIR=$OLDPWD
