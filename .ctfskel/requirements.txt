@@ -1,5 +1,4 @@
 jupyterlab
 paramiko
-ipyparallel
 pwntools
 chepy
