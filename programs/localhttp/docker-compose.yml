@@ -1,0 +1,18 @@
+services:
+  ngrok:
+    #build: "./ngrok"
+    image: ngrok/ngrok
+    environment:
+      - "NGROK_CONFIG=/etc/ngrok.yml"
+    volumes:
+      - ${HOME}/.config/ngrok/ngrok.yml:/etc/ngrok.yml
+    command:
+      - "tcp"
+      - "4444"
+      - "--log=stdout"
+    network_mode: "host"
+  http:
+    build: "./http"
+    volumes:
+      - ${PWD}:/target
+    network_mode: "host"

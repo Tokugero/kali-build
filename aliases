@@ -39,7 +39,7 @@ alias xnlinkfinder='docker run --rm -it -v $(pwd):/app/target xnlinkfinder' #htt
 alias xsstrike='docker run --rm -it -v $(pwd):/app/target xsstrike' #https://github.com/s0md3v/XSStrike
 alias xxetester='docker run --rm -it -v $(pwd):/app/target xxetester'
 alias jwt-tool='docker run --rm -it --network "host" -v ${HOME}/.jwt_tool:/root/.jwt_tool -v $(pwd):/tmp jwt-tool'
-alias localtunnel='docker run --rm -it --network "host" localtunnel 8080'
+alias revhttp='docker compose --project-directory ~/.local/build/programs/localhttp up --build'
 
 upgradecontainers() { #Iterates through ~/.local/build and pulls and builds all containers
     PREV_DIR=$OLDPWD
