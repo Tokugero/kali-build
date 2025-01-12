@@ -1,110 +1,110 @@
 [submodule "analyzemft/analyzeMFT"]
-	path = programs/ganalyzemft/analyzeMFT
+	path = programs/analyzemft/analyzeMFT
 	url = https://github.com/dkovar/analyzeMFT.git
 [submodule "flask-unsign/Flask-Unsign"]
-	path = programs/gflask-unsign/Flask-Unsign
+	path = programs/flask-unsign/Flask-Unsign
 	url = https://github.com/Paradoxis/Flask-Unsign.git
 [submodule "ftpserver/docker-ftp-server"]
-	path = programs/gftpserver/docker-ftp-server
+	path = programs/ftpserver/docker-ftp-server
 	url = https://github.com/garethflowers/docker-ftp-server.git
 [submodule "grpcurl"]
-	path = programs/ggrpcurl
+	path = programs/grpcurl
 	url = https://github.com/fullstorydev/grpcurl.git
 [submodule "httpx"]
-	path = programs/ghttpx
+	path = programs/httpx
 	url = https://github.com/projectdiscovery/httpx.git
 [submodule "impacket"]
-	path = programs/gimpacket
+	path = programs/impacket
 	url = https://github.com/fortra/impacket.git
 [submodule "kiterunner/kiterunner"]
-	path = programs/gkiterunner/kiterunner
+	path = programs/kiterunner/kiterunner
 	url = https://github.com/assetnote/kiterunner.git
 [submodule "LinkFinder"]
-	path = programs/gLinkFinder
+	path = programs/LinkFinder
 	url = https://github.com/GerbenJavado/LinkFinder.git
 [submodule "mft/mft"]
-	path = programs/gmft/mft
+	path = programs/mft/mft
 	url = https://github.com/omerbenamram/mft.git
 [submodule "naabu"]
-	path = programs/gnaabu
+	path = programs/naabu
 	url = https://github.com/projectdiscovery/naabu.git
 [submodule "nginxpwner"]
-	path = programs/gnginxpwner
+	path = programs/nginxpwner
 	url = https://github.com/stark0de/nginxpwner
 [submodule "nosql-attack-suite/NoSQL-Attack-Suite"]
-	path = programs/gnosql-attack-suite/NoSQL-Attack-Suite
+	path = programs/nosql-attack-suite/NoSQL-Attack-Suite
 	url = https://github.com/C4l1b4n/NoSQL-Attack-Suite.git
 [submodule "nuclei"]
-	path = programs/gnuclei
+	path = programs/nuclei
 	url = https://github.com/projectdiscovery/nuclei.git
 [submodule "oxml_xxe"]
-	path = programs/goxml_xxe
+	path = programs/oxml_xxe
 	url = https://github.com/BuffaloWill/oxml_xxe.git
 [submodule "pickora/Pickora"]
-	path = programs/gpickora/Pickora
+	path = programs/pickora/Pickora
 	url = https://github.com/splitline/Pickora.git
 [submodule "python-xasm/python-xasm"]
-	path = programs/gpython-xasm/python-xasm
+	path = programs/python-xasm/python-xasm
 	url = https://github.com/rocky/python-xasm.git
 [submodule "python-xasm/python-xdis"]
-	path = programs/gpython-xasm/python-xdis
+	path = programs/python-xasm/python-xdis
 	url = https://github.com/rocky/python-xdis.git
 [submodule "Ropper"]
-	path = programs/gRopper
+	path = programs/Ropper
 	url = https://github.com/sashs/Ropper
 [submodule "SecretFinder"]
-	path = programs/gSecretFinder
+	path = programs/SecretFinder
 	url = https://github.com/m4ll0k/SecretFinder.git
 [submodule "slurp"]
-	path = programs/gslurp
+	path = programs/slurp
 	url = https://github.com/0xbharath/slurp.git
 [submodule "socialhunter/socialhunter"]
-	path = programs/gsocialhunter/socialhunter
+	path = programs/socialhunter/socialhunter
 	url = https://github.com/utkusen/socialhunter
 [submodule "subfinder"]
-	path = programs/gsubfinder
+	path = programs/subfinder
 	url = https://github.com/projectdiscovery/subfinder.git
 [submodule "sublist3r/Sublist3r"]
-	path = programs/gsublist3r/Sublist3r
+	path = programs/sublist3r/Sublist3r
 	url = https://github.com/aboul3la/Sublist3r
 [submodule "tinja/TInjA"]
-	path = programs/gtinja/TInjA
+	path = programs/tinja/TInjA
 	url = https://github.com/Hackmanit/TInjA.git
 [submodule "tplmap/tplmap"]
-	path = programs/gtplmap/tplmap
+	path = programs/tplmap/tplmap
 	url = https://github.com/epinna/tplmap.git
 [submodule "trufflehog"]
-	path = programs/gtrufflehog
+	path = programs/trufflehog
 	url = https://github.com/trufflesecurity/trufflehog.git
 [submodule "uncompyle6/python-uncompyle6"]
-	path = programs/guncompyle6/python-uncompyle6
+	path = programs/uncompyle6/python-uncompyle6
 	url = https://github.com/rocky/python-uncompyle6.git
 [submodule "xnlinkfinder/xnLinkFinder"]
-	path = programs/gxnlinkfinder/xnLinkFinder
+	path = programs/xnlinkfinder/xnLinkFinder
 	url = https://github.com/xnl-h4ck3r/xnLinkFinder
 [submodule "xsstrike/XSStrike"]
-	path = programs/gxsstrike/XSStrike
+	path = programs/xsstrike/XSStrike
 	url = https://github.com/s0md3v/XSStrike.git
 [submodule "xxetester/xxetester"]
-	path = programs/gxxetester/xxetester
+	path = programs/xxetester/xxetester
 	url = https://github.com/d1y1n/xxetester.git
 [submodule "rustscan/RustScan"]
-	path = programs/grustscan/RustScan
+	path = programs/rustscan/RustScan
 	url = https://github.com/RustScan/RustScan.git
 [submodule "pwncat/pwncat"]
-	path = programs/gpwncat/pwncat
+	path = programs/pwncat/pwncat
 	url = https://github.com/calebstewart/pwncat.git
 [submodule "sherlock/sherlock"]
-	path = programs/gsherlock/sherlock
+	path = programs/sherlock/sherlock
 	url = https://github.com/sherlock-project/sherlock.git
 [submodule "firebaseexploiter/firebaseExploiter"]
-	path = programs/gfirebaseexploiter/firebaseExploiter
+	path = programs/firebaseexploiter/firebaseExploiter
 	url = https://github.com/securebinary/firebaseExploiter.git
 [submodule "ligolo-ng/ligolo-ng"]
-	path = programs/gligolo-ng/ligolo-ng
+	path = programs/ligolo-ng/ligolo-ng
 	url = https://github.com/nicocha30/ligolo-ng.git
 [submodule "RsaCracker"]
-	path = programs/gRsaCracker
+	path = programs/RsaCracker
 	url = https://github.com/skyf0l/RsaCracker.git
 [submodule "programs/jwt-tool"]
 	path = programs/jwt-tool
