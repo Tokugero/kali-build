@@ -109,3 +109,6 @@
 [submodule "programs/jwt-tool"]
 	path = programs/jwt-tool
 	url = https://github.com/ticarpi/jwt_tool.git
+[submodule "programs/nyxelf/nyxelf"]
+	path = programs/nyxelf/nyxelf
+	url = https://github.com/M3rcuryLake/Nyxelf.git

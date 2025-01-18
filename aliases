@@ -40,6 +40,7 @@ alias xsstrike='docker run --rm -it -v $(pwd):/app/target xsstrike' #https://git
 alias xxetester='docker run --rm -it -v $(pwd):/app/target xxetester'
 alias jwt-tool='docker run --rm -it --network "host" -v ${HOME}/.jwt_tool:/root/.jwt_tool -v $(pwd):/tmp jwt-tool'
 alias revhttp='docker compose --project-directory ~/.local/build/programs/localhttp up --build'
+alias nyxelf='docker run -it -v $(pwd):/app/target --device /dev/kvm:/dev/kvm nyxelf'
 
 upgradecontainers() { #Iterates through ~/.local/build and pulls and builds all containers
     PREV_DIR=$OLDPWD
