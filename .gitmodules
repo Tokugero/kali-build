@@ -115,6 +115,3 @@
 [submodule "programs/tulip/tulip"]
 	path = programs/tulip/tulip
 	url = https://github.com/OpenAttackDefenseTools/tulip.git
-[submodule "tulip/tulip"]
-	path = tulip/tulip
-	url = https://github.com/OpenAttackDefenseTools/tulip.git
