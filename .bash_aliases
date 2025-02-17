@@ -140,11 +140,11 @@ startroom() { #Creates a new directory and copies the skel files into it
 help() { #Prints this help message
     echo "Custom commands provided by aliases, so you don't have to look them up yourself. \n\n\n"
     echo "Aliases:\n"
-    cat ~/.bash_aliases | grep alias | grep -v "grep" | awk '{for (i=2; i<NF; i++) printf $i " "; print $NF}' | pygmentize -g
+    cat ~/.local/build/.bash_aliases | grep alias | grep -v "grep" | awk '{for (i=2; i<NF; i++) printf $i " "; print $NF}' | pygmentize -g
     cat ~/.local/build/aliases | grep alias | grep -v "grep" | awk '{for (i=2; i<NF; i++) printf $i " "; print $NF}' | pygmentize -g
 
     echo "\nFunctions:\n"
-    cat ~/.bash_aliases | grep \(\) | tr "\(" " " | awk '{printf $1 " "; for (i=4; i<NF; i++) printf $i " "; print $NF}' | pygmentize -l zsh
+    cat ~/.local/build/.bash_aliases | grep \(\) | tr "\(" " " | awk '{printf $1 " "; for (i=4; i<NF; i++) printf $i " "; print $NF}' | pygmentize -l zsh
     cat ~/.local/build/aliases | grep \(\) | tr "\(" " " | awk '{printf $1 " "; for (i=4; i<NF; i++) printf $i " "; print $NF}' | pygmentize -l zsh
 }
 . ~/.local/build/aliases
