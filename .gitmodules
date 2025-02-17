@@ -112,3 +112,6 @@
 [submodule "programs/nyxelf/nyxelf"]
 	path = programs/nyxelf/nyxelf
 	url = https://github.com/M3rcuryLake/Nyxelf.git
+[submodule "programs/tulip/tulip"]
+	path = programs/tulip/tulip
+	url = https://github.com/OpenAttackDefenseTools/tulip.git
