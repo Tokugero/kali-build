@@ -131,7 +131,7 @@ startroom() { #Creates a new directory and copies the skel files into it
         room="room"
     fi
     cd $room
-    cp ~/ctf/.skel/* .
+    cp ~/.local/build/.ctfskel/* .
     sed -i "s/TEMPLATE/$room/g" engagement.ipynb
     python3 -m venv .venv
     . .venv/bin/activate
