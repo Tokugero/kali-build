@@ -56,3 +56,29 @@ upgradecontainers() { #Iterates through ~/.local/build and pulls and builds all 
     cd $PREV_DIR
 }
 
+tulip() {
+    # Script to check if $(pwd)/tulip exists, if it does not then create the directory, 
+    # copy the configurations.py and .env files from the tulip container, and inform the user to edit the files. 
+    # If this does exist, then run the tulip container with the configurations.py and .env files mounted.
+    if [ ! -f "tulip/.env" ]; then
+        # If arg1 is not set, then inform the user and exit
+        if [ -z "$1" ]; then
+            echo "Usage: tulip <VM_IP>";
+            return;
+        fi
+        mkdir -p tulip;
+        cp -n ~/.local/build/programs/tulip/tulip/services/api/configurations.py ./tulip/configurations.py;
+        echo "CONFIG=$(pwd)/tulip/configurations.py" >> tulip/.env;
+        echo "TRAFFIC_DIR_HOST=$(pwd)/tulip/traffic" >> tulip/.env;
+        echo "VM_IP=$1" >> tulip/.env;
+        cp -n ~/.local/build/programs/tulip/.env ./tulip/.env;
+        # Generate a non-interactive generic id_ed25519 keypair for the tulip container
+        ssh-keygen -t ed25519 -f $(pwd)/tulip/id_ed25519 -N "" || echo "ssh generator failed for some reason, probably ssh already exists";
+        echo "PRIVATE_KEY="$(cat tulip/id_ed25519 | base64 -w 0) >> tulip/.env;
+        echo "Base files have been created. Please edit the configurations.py and .env files in the tulip directory before running the container.";
+        echo "Copy the following o the authorized_keys file on the target machine to enable ssh tcpdump.";
+        cat tulip/id_ed25519.pub | awk '{print $1" "$2}';
+    else
+        docker compose --project-directory ~/.local/build/programs/tulip --env-file ./tulip/.env up --quiet-pull --build;
+    fi
+}

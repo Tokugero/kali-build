@@ -1,0 +1,121 @@
+version: "3.2"
+services:
+  mongo:
+    image: mongo:5
+    networks:
+      - internal
+    restart: always
+    ports:
+      - "27017:27017"
+
+  frontend:
+    build:
+      context: tulip/frontend
+      dockerfile: Dockerfile-frontend
+    image: tulip-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongo
+      - api
+    networks:
+      - internal
+    environment:
+      API_SERVER_ENDPOINT: http://api:5000/
+
+  api:
+    build:
+      context: tulip/services/api
+      dockerfile: Dockerfile-api
+    image: tulip-api:latest
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    networks:
+      - internal
+    volumes:
+      - ${TRAFFIC_DIR_HOST}:/traffic:ro
+      - ${CONFIG}:/app/configurations.py:ro
+    environment:
+      TULIP_MONGO: mongo:27017
+      TULIP_TRAFFIC_DIR: /traffic
+      FLAG_REGEX: ${FLAG_REGEX}
+      TICK_START: ${TICK_START}
+      TICK_LENGTH: ${TICK_LENGTH}
+      VM_IP: ${VM_IP}
+
+  flagids:
+    restart: on-failure
+    build:
+      context: tulip/services/flagids
+    image: tulip-flagids:latest
+    depends_on:
+      - mongo
+    networks:
+      - internal
+    environment:
+      TULIP_MONGO: mongo:27017
+      TICK_START: ${TICK_START}
+      TICK_LENGTH: ${TICK_LENGTH}
+      FLAGID_SCRAPE: ${FLAGID_SCRAPE}
+      TEAM_ID: ${TEAM_ID}
+      FLAGID_ENDPOINT: ${FLAGID_ENDPOINT}
+
+  assembler:
+    build:
+      context: tulip/services/go-importer
+      dockerfile: Dockerfile-assembler
+    image: tulip-assembler:latest
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    networks:
+      - internal
+    volumes:
+      - ${TRAFFIC_DIR_HOST}:/traffic:ro
+    command: "./assembler -dir /traffic"
+    environment:
+      TULIP_MONGO: mongo:27017
+      FLAG_REGEX: ${FLAG_REGEX}
+      TICK_LENGTH: ${TICK_LENGTH}
+      FLAGID_SCAN: ${FLAGID_SCAN}
+      FLAG_LIFETIME: ${FLAG_LIFETIME}
+      PCAP_OVER_IP: ${PCAP_OVER_IP}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+
+  enricher:
+    build:
+      context: tulip/services/go-importer
+      dockerfile: Dockerfile-enricher
+    image: tulip-enricher:latest
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    networks:
+      - internal
+    volumes:
+      - ${TRAFFIC_DIR_HOST}:/traffic:ro
+    command: "./enricher -eve /traffic/eve.json"
+    environment:
+      TULIP_MONGO: mongo:27017
+
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    image: tulip-agent:latest
+    restart: unless-stopped
+    volumes:
+      - ${TRAFFIC_DIR_HOST}:/traffic:rw
+    environment:
+      TARGET: ${VM_IP}
+      PRIVATE_KEY: ${PRIVATE_KEY}
+      AGENT_USER: ${AGENT_USER:-root}
+    ports:
+      - "1234:1234"
+
+networks:
+  internal:
