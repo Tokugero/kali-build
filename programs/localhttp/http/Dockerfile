@@ -2,4 +2,6 @@ FROM python
 
 WORKDIR /target
 
-CMD ["python", "-m", "http.server", "4444"]
+COPY . /app
+
+CMD ["python", "/app/customserver.py"]
