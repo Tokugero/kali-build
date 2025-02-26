@@ -42,6 +42,7 @@ alias jwt-tool='docker run --rm -it --network "host" -v ${HOME}/.jwt_tool:/root/
 alias revhttp='docker compose --project-directory ~/.local/build/programs/localhttp up --build'
 alias nyxelf='docker run -it -v $(pwd):/app/target --device /dev/kvm:/dev/kvm nyxelf'
 alias bloodhound='docker compose --project-directory ~/.local/build/programs/bloodhound'
+alias foundry='docker run -it -v $(pwd):/app/target ghcr.io/foundry-rs/foundry:latest' #https://github.com/foundry-rs/foundry
 
 upgradecontainers() { #Iterates through ~/.local/build and pulls and builds all containers
     PREV_DIR=$OLDPWD
