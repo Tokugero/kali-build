@@ -6,7 +6,7 @@ from pwn import *
 
 # Set up pwntools for the correct architecture
 context.update(arch='amd64')
-context.terminal = ['/usr/bin/konsole', '--new-tab', '-e']
+context.terminal = ['ghostty', '-e']
 exe = './'
 elf = context.binary = ELF(exe, checksec=False)
 
