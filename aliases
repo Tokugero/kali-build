@@ -43,6 +43,7 @@ alias revhttp='docker compose --project-directory ~/.local/build/programs/localh
 alias nyxelf='docker run -it -v $(pwd):/app/target --device /dev/kvm:/dev/kvm nyxelf'
 alias bloodhound='docker compose --project-directory ~/.local/build/programs/bloodhound'
 alias foundry='docker run -it -v $(pwd):/app/target ghcr.io/foundry-rs/foundry:latest' #https://github.com/foundry-rs/foundry
+alias autorecon='docker run -it --rm -v $(pwd)/results:/app/results bonzodock/autorecon' #https://github.com/Tib3rius/AutoRecon
 
 upgradecontainers() { #Iterates through ~/.local/build and pulls and builds all containers
     PREV_DIR=$OLDPWD
