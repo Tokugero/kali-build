@@ -136,6 +136,7 @@ startroom() { #Creates a new directory and copies the skel files into it
     python3 -m venv .venv
     . .venv/bin/activate
     pip install -r requirements.txt
+    playwright install
 }
 help() { #Prints this help message
     echo "Custom commands provided by aliases, so you don't have to look them up yourself. \n\n\n"
