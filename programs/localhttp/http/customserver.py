@@ -1,81 +1,124 @@
-# TODO: Python script to start a generic server and parse out the following uris:
-# /api?m=<input> (should be output as a string)
-# /api?mb64=<input> (should parse out the base64 and output as a string)
-# /api?c=<input> (should parse out the cookie and output as a string)
-# /api?cb64 (should parse out the base64 and output as a string)
-# /payload /target with index
-
 import http.server
 import socketserver
 import os
 import base64
 import urllib.parse
 import re
-PORT = 4444
+
+PORT = int(os.environ.get('PORT', 4444))
+
+ENDPOINTS = {
+    "/api?m=<input>": "Echoes the input as a string.",
+    "/api?mb64=<base64input>": "Decodes base64 input and echoes the result as a string.",
+    "/api?c=<input>": "Echoes the input as a string (cookie format).",
+    "/api?cb64=<base64input>": "Decodes base64 input (cookie format) and echoes the result as a string.",
+    "/api?file=<filename>&p=<payload>": "Appends the payload to the specified file (filename must not contain '/').",
+    "/api?fileb64=<filename>&p=<base64payload>": "Decodes base64 payload and appends to the specified file (filename must not contain '/').",
+    "/help": "Lists all available endpoints and their descriptions."
+}
+
+def parse_post_data(handler):
+    content_length = int(handler.headers.get('Content-Length', 0))
+    body = handler.rfile.read(content_length).decode()
+    return urllib.parse.parse_qs(body)
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        if self.path.startswith('/api?m='):
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.log_message("m: %s", urllib.parse.unquote(self.path[7:]))
-        elif self.path.startswith('/api?mb64='):
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.log_message("m decoded: %s", base64.b64decode(urllib.parse.unquote(self.path[10:])))
-        elif self.path.startswith('/api?c='):
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.log_message("c: %s", urllib.parse.unquote(self.path[7:]))
-        elif self.path.startswith('/api?cb64='):
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.log_message("c decoded: %s", base64.b64decode(urllib.parse.unquote(self.path[10:])))
-        # elif /api?file=.*p= then append contents of p to file name
-        elif self.path.startswith('/api?file='):
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            # Regex capture file=(.*)p=(.*)
-            params = re.search(r'file=(.*)&p=(.*)', self.path)
-            filename = params.group(1)
+    def respond(self, msg):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        if isinstance(msg, str):
+            self.wfile.write(msg.encode())
+        else:
+            self.wfile.write(msg)
+
+    def show_endpoints(self):
+        msg = "Available endpoints:\n\n"
+        for ep, desc in ENDPOINTS.items():
+            msg += f"{ep}\n    {desc}\n\n"
+        self.respond(msg)
+
+    def handle_api(self, method='GET', params=None):
+        # Parse GET or POST parameters
+        if method == 'GET':
+            query = urllib.parse.urlparse(self.path).query
+            params = urllib.parse.parse_qs(query)
+        elif params is None:
+            params = {}
+
+        # /api?m=<input>
+        if 'm' in params:
+            self.respond(urllib.parse.unquote(params['m'][0]))
+        # /api?mb64=<input>
+        elif 'mb64' in params:
+            try:
+                decoded = base64.b64decode(urllib.parse.unquote(params['mb64'][0])).decode()
+                self.respond(decoded)
+            except Exception as e:
+                self.respond(f"Invalid base64: {e}")
+        # /api?c=<input>
+        elif 'c' in params:
+            self.respond(urllib.parse.unquote(params['c'][0]))
+        # /api?cb64=<input>
+        elif 'cb64' in params:
+            try:
+                decoded = base64.b64decode(urllib.parse.unquote(params['cb64'][0])).decode()
+                self.respond(decoded)
+            except Exception as e:
+                self.respond(f"Invalid base64: {e}")
+        # /api?file=<filename>&p=<payload>
+        elif 'file' in params and 'p' in params:
+            filename = params['file'][0]
             if "/" in filename:
-                self.log_message("Hackers detected!")
+                self.respond("Hackers detected!")
             else:
-                payload = params.group(2)
+                payload = params['p'][0]
                 with open(filename, 'a') as f:
                     f.write(payload)
-        elif self.path.startswith('/api?fileb64='):
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            # Regex capture file=(.*)p=(.*)
-            params = re.search(r'fileb64=(.*)&p=(.*)', self.path)
-            filename = params.group(1)
+                self.respond(f"Payload appended to {filename}")
+        # /api?fileb64=<filename>&p=<payload>
+        elif 'fileb64' in params and 'p' in params:
+            filename = params['fileb64'][0]
             if "/" in filename:
-                self.log_message("Hackers detected!")
+                self.respond("Hackers detected!")
             else:
-                payload = base64.b64decode(params.group(2))
-                with open(filename, 'a') as f:
-                    f.write(payload.decode())
-        elif self.path.startswith('/help'):
-            # Print the options from above
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(b"Options: /api?m= /api?mb64= /api?c= /api?cb64= /api?file=.*&p=<payload> /api?file64=.*&p=<payload>")
+                try:
+                    payload = base64.b64decode(params['p'][0]).decode()
+                    with open(filename, 'a') as f:
+                        f.write(payload)
+                    self.respond(f"Decoded payload appended to {filename}")
+                except Exception as e:
+                    self.respond(f"Invalid base64: {e}")
+        else:
+            self.respond("Invalid API call. See /help for options.")
+
+    def do_GET(self):
+        if self.path.startswith('/help'):
+            self.show_endpoints()
+        elif self.path.startswith('/api'):
+            self.handle_api(method='GET')
         else:
             super().do_GET()
 
+    def do_POST(self):
+        if self.path.startswith('/api'):
+            params = parse_post_data(self)
+            self.handle_api(method='POST', params=params)
+        elif self.path.startswith('/help'):
+            self.show_endpoints()
+        else:
+            super().do_POST()
+
+
 Handler = CustomHandler
 
-with socketserver.TCPServer(("", PORT), Handler) as httpd:
-    httpd.serve_forever()
+def print_endpoints():
+    print("Available endpoints:\n")
+    for ep, desc in ENDPOINTS.items():
+        print(f"{ep}\n    {desc}\n")
+    print(f"\nServer is running on port {PORT}\n")
 
-# Run the server with the following command:
-# python customserver.py
-# Navigate to http://localhost:8000/api?m=hello to see the output
+if __name__ == "__main__":
+    print_endpoints()
+    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+        httpd.serve_forever()

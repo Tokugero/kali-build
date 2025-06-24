@@ -45,6 +45,7 @@ alias vpn-hackerone='sudo wg-quick up /home/tokugero/ctf/hackerone/wg.conf'
 alias vpn-htb='sudo openvpn --config /home/tokugero/ctf/htb/htbvip.ovpn'
 alias vpn-thm='sudo openvpn --config /home/tokugero/ctf/thm/thm.ovpn'
 alias webup='echo "EXPOSING PORT 9080" && sudo python -m http.server 9080'
+alias localweb='python /home/tokugero/.local/build/programs/localhttp/http/customserver.py'
 urlencode() { #Encode URL encoded values
     python3 -c "from pwn import *; print(urlencode('$1'));"
 }
@@ -131,12 +132,37 @@ startroom() { #Creates a new directory and copies the skel files into it
         room="room"
     fi
     cd $room
-    cp ~/.local/build/.ctfskel/* .
+    cp -r ~/.local/build/.ctfskel/* .
     sed -i "s/TEMPLATE/$room/g" engagement.ipynb
     python3 -m venv .venv
     . .venv/bin/activate
     pip install -r requirements.txt
     playwright install
+}
+nb2jekyll() {
+  slug="$1"
+  if [ -z "$slug" ]; then
+    echo "Usage: nb2jekyll <slug>"
+    return 1
+  fi
+
+  jupyter nbconvert --to markdown engagement.ipynb
+
+  # Prepare new directories
+  assetdir="jekyll/assets/${slug}.md/${slug}/images"
+  mkdir -p "$assetdir"
+
+  # Update image references in engagement.md
+  sed -E "s#engagement_files/([^\)]+)#../../../assets/${slug}.md/${slug}/images/\1#g" engagement.md > "jekyll/${slug}.md"
+
+  # Move images to the new location
+  grep -oE 'engagement_files/[^)\ ]+' engagement.md | while read img; do
+    fname=$(basename "$img")
+    mkdir -p "$assetdir"
+    mv "$img" "$assetdir/$fname"
+  done
+
+  echo "Done. Markdown is at jekyll/${slug}.md"
 }
 help() { #Prints this help message
     echo "Custom commands provided by aliases, so you don't have to look them up yourself. \n\n\n"

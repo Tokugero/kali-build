@@ -2,3 +2,6 @@ jupyterlab
 paramiko
 pwntools
 chepy
+selenium
+selenium-requests
+sshtunnel
