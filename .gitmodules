@@ -115,6 +115,3 @@
 [submodule "programs/tulip/tulip"]
 	path = programs/tulip/tulip
 	url = https://github.com/OpenAttackDefenseTools/tulip.git
-[submodule "nettacker/nettacker"]
-	path = programs/nettacker/nettacker
-	url = https://github.com/OWASP/Nettacker.git
