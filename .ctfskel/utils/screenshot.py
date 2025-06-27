@@ -33,11 +33,11 @@ def screenshot(
     selector_part = ""
     if element_selector:
         selector_part = element_selector.replace("#", "id_").replace(".", "class_").replace(" ", "_")
-    session_id = str(session.cookies.get_dict())
+    session_id = str(session.cookies.get_dict())+uri_part
     sha1 = hashlib.sha1(session_id.encode()).hexdigest()[:6]
     if not savelocation:
         os.makedirs("engagement_files", exist_ok=True)
-        filename = f"{domain}_{uri_part}_{timestamp}_{sha1}"
+        filename = f"{domain}_{timestamp}_{sha1}"
         if selector_part:
             filename += f"_{selector_part}"
         filename += ".png"
@@ -108,21 +108,31 @@ def screenshot(
     driver = Firefox(options=options)
     driver.set_window_size(width, height)
 
-    # Set cookies for the target domain
-    driver.get(url)
+    driver.get(url)  # Needed to set the domain context
+
+    # Add all cookies from the requests session that match the target domain
     for c in session.cookies:
-        try:
-            driver.add_cookie({
+        # Only set cookies for the current domain (or superdomain)
+        cookie_domain = c.domain if hasattr(c, "domain") else parsed.hostname
+        if parsed.hostname.endswith(cookie_domain.lstrip('.')):
+            cookie_dict = {
                 'name': c.name,
                 'value': c.value,
-                'domain': parsed.hostname,
                 'path': getattr(c, 'path', '/'),
-            })
-        except Exception:
-            pass
+                # domain is optional in selenium; only set if cross-domain
+            }
+            # Only set domain if it's a superdomain cookie
+            if cookie_domain != parsed.hostname:
+                cookie_dict['domain'] = cookie_domain
+            try:
+                driver.add_cookie(cookie_dict)
+            except Exception as e:
+                print(f"Failed to add cookie {c.name}: {e}")
+
     driver.refresh()
 
     headers = dict(session.headers) if hasattr(session, "headers") else {}
+    
     driver.request('GET', url, headers=headers)
 
     # Set the zoom using JS

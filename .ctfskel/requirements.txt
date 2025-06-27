@@ -5,3 +5,4 @@ chepy
 selenium
 selenium-requests
 sshtunnel
+bs4
