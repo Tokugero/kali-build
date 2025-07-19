@@ -116,6 +116,7 @@ out = tokuproxy.exec("id", sudo=True)
 print("Remote id (sudo):", out)
 '''
     }
+}
 
     @classmethod
     def summary(cls):
