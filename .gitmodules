@@ -115,3 +115,6 @@
 [submodule "programs/tulip/tulip"]
 	path = programs/tulip/tulip
 	url = https://github.com/OpenAttackDefenseTools/tulip.git
+[submodule "programs/adaptixc2/adaptixc2"]
+	path = programs/adaptixc2/adaptixc2
+	url = https://github.com/Adaptix-Framework/AdaptixC2.git
