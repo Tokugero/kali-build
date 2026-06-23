@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# addhost — set the engagement's target hostnames for the room session.
+# Updates the bind-mounted /etc/hosts and the unbound resolver live, so the
+# shell, the Jupyter notebook, and every tool in the netns resolve them.
+#
+#   addhost <name> <ip>     map (or remap) a hostname            e.g. addhost dc01.lab.htb 10.129.10.5
+#   addhost -d <name>       remove a mapping
+#   addhost -l              list current mappings
+#
+# Source of truth: $CTF_RUNTIME/hosts.d (one "name<TAB>ip" record per line).
+# Both outputs are rewritten with truncate-in-place (never sed -i / mv) so the
+# /etc/hosts bind-mount keeps tracking the same inode.
+
+set -euo pipefail
+
+CTF_RUNTIME="${CTF_RUNTIME:?not in a room shell (CTF_RUNTIME unset) — 'cd' into the room and 'room-enter' first}"
+DB="$CTF_RUNTIME/hosts.d"
+HOSTS="$CTF_RUNTIME/hosts"
+UB_LOCAL="$CTF_RUNTIME/unbound.local.conf"
+UB_PID="$CTF_RUNTIME/unbound.pid"
+BEG="# >>> room-enter addhost (managed) >>>"
+END="# <<< room-enter addhost (managed) <<<"
+
+die() { echo "addhost: $*" >&2; exit 1; }
+[[ -f "$DB" ]] || : > "$DB"
+
+regen() {
+  # /etc/hosts managed block (truncate-in-place to preserve the bind inode).
+  if [[ -f "$HOSTS" ]]; then
+    local block new
+    block=$(awk -F'\t' 'NF>=2{printf "%s %s\n",$2,$1}' "$DB")
+    if grep -qF "$BEG" "$HOSTS"; then
+      new=$(awk -v beg="$BEG" -v end="$END" -v block="$block" '
+        $0==beg { print; if(block!="")print block; skip=1; next }
+        $0==end { skip=0; print; next }
+        !skip   { print }' "$HOSTS")
+    else
+      new=$(printf '%s\n%s\n%s\n%s\n' "$(cat "$HOSTS")" "$BEG" "$block" "$END")
+    fi
+    printf '%s\n' "$new" > "$HOSTS"
+  fi
+
+  # unbound local-data include (truncate-in-place), then reload if reachable.
+  awk -F'\t' 'NF>=2{printf "local-data: \"%s. A %s\"\n",$1,$2}' "$DB" > "$UB_LOCAL"
+  if [[ "${CTF_LAYER:-1}" == 2 && -f "$UB_PID" ]]; then
+    kill -HUP "$(cat "$UB_PID")" 2>/dev/null || true
+  fi
+}
+
+cmd_add() {
+  local name="$1" ip="$2"
+  [[ -n "$name" && -n "$ip" ]] || die "usage: addhost <name> <ip>"
+  [[ "$ip" =~ ^[0-9]+(\.[0-9]+){3}$ ]] || die "'$ip' is not an IPv4 address"
+  # drop any existing record for this name, then append. Truncate-in-place.
+  local kept; kept=$(awk -F'\t' -v n="$name" '$1!=n' "$DB")
+  { [[ -n "$kept" ]] && printf '%s\n' "$kept"; printf '%s\t%s\n' "$name" "$ip"; } > "$DB"
+  regen
+  echo "addhost: $name -> $ip"
+}
+
+cmd_del() {
+  local name="$1"; [[ -n "$name" ]] || die "usage: addhost -d <name>"
+  grep -qP "^${name}\t" "$DB" || die "no mapping for '$name'"
+  local kept; kept=$(awk -F'\t' -v n="$name" '$1!=n' "$DB")
+  { [[ -n "$kept" ]] && printf '%s\n' "$kept"; } > "$DB"
+  regen
+  echo "addhost: removed $name"
+}
+
+cmd_list() {
+  if [[ -s "$DB" ]]; then
+    awk -F'\t' 'NF>=2{printf "  %-32s %s\n",$1,$2}' "$DB"
+  else
+    echo "  (no mappings — addhost <name> <ip> to add one)"
+  fi
+}
+
+case "${1:-}" in
+  -l|--list|"") cmd_list ;;
+  -d|--del)     cmd_del "${2:-}" ;;
+  -h|--help)    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -*)           die "unknown flag: $1" ;;
+  *)            cmd_add "$1" "${2:-}" ;;
+esac

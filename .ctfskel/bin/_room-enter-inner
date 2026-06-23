@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+# _room-enter-inner — the namespace holder. room-enter creates a user+net+mount
+# +uts namespace (via unshare) running this script, then installs our uid/gid
+# map with newuidmap/newgidmap so that:
+#   - we become uid 0 inside (CAP_NET_ADMIN to bring up tun0 + routes),
+#   - our $HOME stays accessible (inside-0 maps to our real uid),
+#   - setgroups stays "allow" (the map is written by the setuid helpers, not by
+#     an unprivileged self-write) — which keeps interactive zsh quiet.
+# pasta(1) then joins the netns for connectivity. This script waits for the map,
+# waits for connectivity, brings up the VPN tunnel + split DNS, and holds the
+# namespace open so shells + the notebook can nsenter in.
+#
+# No privileged operations on the host: every capability acts only on resources
+# the user namespace owns (its netns, its mount namespace).
+
+set -euo pipefail
+
+# 1. Block until room-enter installs our uid/gid map. Until then we're an
+#    unmapped "nobody" with no caps; after the read returns we are uid 0.
+exec 9<>"${CTF_MAP_FIFO:?CTF_MAP_FIFO not set}"
+read -r -u 9 _
+
+ROOM_NAME="${ROOM_NAME:-room}"
+CTF_RUNTIME="${CTF_RUNTIME:?CTF_RUNTIME not set}"
+CTF_VPN_CONFIG="${CTF_VPN_CONFIG:?CTF_VPN_CONFIG not set}"
+CTF_VPN_NAME="${CTF_VPN_NAME:-vpn}"
+CTF_LAB_DOMAIN="${CTF_LAB_DOMAIN:-}"
+CTF_LAB_DNS="${CTF_LAB_DNS:-}"
+
+die() { echo "[room-inner] $*" >&2; exit 1; }
+log() { echo "[room-inner] $*" >&2; }
+
+[[ -f "$CTF_VPN_CONFIG" ]] || die "VPN config not found: $CTF_VPN_CONFIG"
+hostname "ctf-$ROOM_NAME" 2>/dev/null || true
+
+# 2. Wait for pasta to join the netns and install host connectivity (it adds a
+#    default route). Without it the VPN server is unreachable.
+for _ in $(seq 1 200); do ip route show default 2>/dev/null | grep -q . && break; sleep 0.05; done
+ip route show default 2>/dev/null | grep -q . || die "no connectivity — pasta join failed?"
+
+# Bypass the host name-service cache (nscd/nsncd). It runs in the host mount
+# namespace and would shadow our per-namespace /etc/hosts + resolv.conf — so
+# addhost entries and the unbound resolver would silently never take effect.
+# Hiding its socket makes glibc read files/dns directly in this namespace.
+if [[ -d /run/nscd ]]; then mount -t tmpfs tmpfs /run/nscd 2>/dev/null || true; fi
+if [[ -d /var/run/nscd && ! -L /var/run ]]; then mount -t tmpfs tmpfs /var/run/nscd 2>/dev/null || true; fi
+
+# 3. Capture pasta's gateway + the upstream resolver before we touch routing or
+#    resolv.conf. pasta proxies DNS sent to the host's resolver, so unbound
+#    forwards "." there.
+PASTA_GW=$(ip route show default | awk '/^default/ {print $3; exit}')
+PASTA_IF=$(ip route show default | awk '/^default/ {print $5; exit}')
+[[ -n "$PASTA_GW" && -n "$PASTA_IF" ]] || die "pasta default route not found"
+
+UPSTREAM_DNS=$(awk '/^nameserver/ {print $2; exit}' /etc/resolv.conf 2>/dev/null || true)
+[[ -n "$UPSTREAM_DNS" ]] || UPSTREAM_DNS="1.1.1.1"
+log "pasta gw=$PASTA_GW if=$PASTA_IF upstream-dns=$UPSTREAM_DNS"
+
+# Pin host routes to VPN server endpoints via pasta, so the tunnel's control
+# channel survives even if the config pushes a default route through the tunnel.
+pin_endpoint() {
+  local host="$1" ip
+  if [[ "$host" =~ ^[0-9]+(\.[0-9]+){3}$ ]]; then ip="$host"
+  else ip=$(getent ahostsv4 "$host" 2>/dev/null | awk '{print $1; exit}'); fi
+  [[ -n "$ip" ]] || { log "warn: could not resolve VPN endpoint '$host'"; return; }
+  ip route add "$ip/32" via "$PASTA_GW" dev "$PASTA_IF" 2>/dev/null \
+    && log "pinned VPN endpoint $ip via pasta gw" || true
+}
+
+# ---------------------------------------------------------------------------
+# 4. Bring up the tunnel. Detect type from the config.
+# ---------------------------------------------------------------------------
+TUN_PID=""
+if grep -qiE '^\[Interface\]' "$CTF_VPN_CONFIG"; then
+  # ---- WireGuard path -----------------------------------------------------
+  IFACE=wg0
+  wg_config="$(cat "$CTF_VPN_CONFIG")"
+
+  extract() {
+    echo "$wg_config" | awk -v k="${1,,}" '
+      /^\[/ { s=tolower($0); next }
+      s=="[interface]" { sub(/[ \t]*=[ \t]*/,"=",$0); n=index($0,"=")
+        if(!n)next; key=tolower(substr($0,1,n-1)); gsub(/[ \t]/,"",key)
+        if(key==k){v=substr($0,n+1);sub(/^[ \t]+/,"",v);sub(/[ \t]+$/,"",v);print v;exit} }'
+  }
+  extract_peer() {
+    echo "$wg_config" | awk -v k="${1,,}" '
+      /^\[/ { s=tolower($0); next }
+      s=="[peer]" { sub(/[ \t]*=[ \t]*/,"=",$0); n=index($0,"=")
+        if(!n)next; key=tolower(substr($0,1,n-1)); gsub(/[ \t]/,"",key)
+        if(key==k){v=substr($0,n+1);sub(/^[ \t]+/,"",v);sub(/[ \t]+$/,"",v);print v;exit} }'
+  }
+
+  ADDR=$(extract Address | cut -d, -f1)
+  ENDPOINT=$(extract_peer Endpoint); ENDPOINT_HOST="${ENDPOINT%:*}"
+  ALLOWED=$(extract_peer AllowedIPs)
+  [[ -n "$ADDR" ]] || die "no Address in [Interface]"
+  [[ -n "$ENDPOINT_HOST" ]] || die "no Endpoint in [Peer]"
+  pin_endpoint "$ENDPOINT_HOST"
+
+  if [[ ! -d /var/run/wireguard ]]; then
+    mount -t tmpfs tmpfs /var 2>/dev/null || true
+    mkdir -p /var/run/wireguard
+  fi
+
+  export WG_I_PREFER_BUGGY_USERSPACE_TO_POLISHED_KMOD=1
+  log "starting wireguard-go"
+  WG_PROCESS_FOREGROUND=1 wireguard-go -f "$IFACE" &
+  TUN_PID=$!
+  for _ in $(seq 1 20); do ip link show "$IFACE" &>/dev/null && break; sleep 0.1; done
+  ip link show "$IFACE" &>/dev/null || die "wg0 did not come up"
+
+  wg_tmp=$(mktemp -d "$CTF_RUNTIME/wg.XXXXXX"); chmod 700 "$wg_tmp"
+  printf '%s\n' "$wg_config" > "$wg_tmp/$IFACE.conf"; chmod 600 "$wg_tmp/$IFACE.conf"
+  wg-quick strip "$wg_tmp/$IFACE.conf" | wg setconf "$IFACE" /dev/stdin
+  rm -rf "$wg_tmp"
+  for peer in $(wg show "$IFACE" peers); do
+    wg set "$IFACE" peer "$peer" persistent-keepalive 25
+  done
+
+  ip addr add "$ADDR" dev "$IFACE"
+  ip link set "$IFACE" up
+  for cidr in ${ALLOWED//,/ }; do
+    case "$cidr" in
+      0.0.0.0/0|::/0) ip route replace default dev "$IFACE" 2>/dev/null || true ;;
+      *:*) : ;;
+      *) ip route replace "$cidr" dev "$IFACE" 2>/dev/null || true ;;
+    esac
+  done
+  log "wireguard up on $IFACE ($ADDR); routes: $ALLOWED"
+
+else
+  # ---- OpenVPN path (primary: HTB / THM .ovpn) ---------------------------
+  IFACE=tun0
+  while read -r host _; do
+    [[ -n "$host" ]] && pin_endpoint "$host"
+  done < <(awk 'tolower($1)=="remote"{print $2, $3}' "$CTF_VPN_CONFIG")
+
+  # Strip the user/group privilege-drop (setgroups happens to be allowed now,
+  # but openvpn's drop to 'nobody' would still lose our home access) and any
+  # hardcoded dev name (we force tun0). Inline cert/key blocks are preserved;
+  # relative file refs resolve via --cd to the original config dir.
+  SAN="$CTF_RUNTIME/client.conf"
+  grep -ivE '^[[:space:]]*(user|group|dev)[[:space:]]' "$CTF_VPN_CONFIG" > "$SAN"
+  chmod 600 "$SAN"
+  ORIG_DIR=$(cd "$(dirname "$CTF_VPN_CONFIG")" && pwd)
+
+  log "starting openvpn (dev $IFACE, config $CTF_VPN_NAME)"
+  openvpn \
+    --cd "$ORIG_DIR" \
+    --config "$SAN" \
+    --dev "$IFACE" \
+    --writepid "$CTF_RUNTIME/openvpn.pid" \
+    --log "$CTF_RUNTIME/openvpn.log" \
+    --verb 3 \
+    --script-security 1 \
+    --pull-filter ignore "dhcp-option" \
+    &
+  TUN_PID=$!
+
+  for _ in $(seq 1 300); do ip link show "$IFACE" &>/dev/null && break
+    kill -0 "$TUN_PID" 2>/dev/null || { tail -20 "$CTF_RUNTIME/openvpn.log" 2>/dev/null >&2; die "openvpn exited before tun0 (see $CTF_RUNTIME/openvpn.log)"; }
+    sleep 0.1; done
+  ip link show "$IFACE" &>/dev/null || { tail -20 "$CTF_RUNTIME/openvpn.log" 2>/dev/null >&2; die "tun0 never came up (see $CTF_RUNTIME/openvpn.log)"; }
+  for _ in $(seq 1 300); do
+    ip -o -4 addr show "$IFACE" 2>/dev/null | grep -q inet && break
+    kill -0 "$TUN_PID" 2>/dev/null || die "openvpn exited during connect (see $CTF_RUNTIME/openvpn.log)"
+    sleep 0.1
+  done
+  log "openvpn up on $IFACE ($(ip -o -4 addr show "$IFACE" | awk '{print $4}'))"
+fi
+
+# ---------------------------------------------------------------------------
+# 5. Session DNS: unbound on 127.0.0.2. "." -> captured upstream (pasta proxies
+#    it); optional lab domain -> its resolver via the tunnel. addhost(1) appends
+#    local-data to an include file + SIGHUPs. A bind-mounted /etc/hosts carries
+#    the same static maps as a fallback.
+# ---------------------------------------------------------------------------
+DNS_ADDR=127.0.0.2
+ip addr add "$DNS_ADDR/32" dev lo 2>/dev/null || true
+
+UB_CONF="$CTF_RUNTIME/unbound.conf"
+UB_LOCAL="$CTF_RUNTIME/unbound.local.conf"
+UB_PID="$CTF_RUNTIME/unbound.pid"
+UB_LOG="$CTF_RUNTIME/unbound.log"
+[[ -f "$UB_LOCAL" ]] || : > "$UB_LOCAL"
+
+{
+  cat <<EOF
+server:
+    interface: $DNS_ADDR
+    port: 53
+    do-ip4: yes
+    do-ip6: no
+    do-udp: yes
+    do-tcp: yes
+    do-daemonize: yes
+    pidfile: "$UB_PID"
+    username: ""
+    chroot: ""
+    directory: "$CTF_RUNTIME"
+    use-syslog: no
+    logfile: "$UB_LOG"
+    verbosity: 0
+    access-control: 127.0.0.0/8 allow
+    do-not-query-localhost: no
+    harden-glue: no
+    qname-minimisation: no
+    include: "$UB_LOCAL"
+EOF
+  if [[ -n "$CTF_LAB_DOMAIN" && -n "$CTF_LAB_DNS" ]]; then
+    printf 'forward-zone:\n    name: "%s."\n    forward-addr: %s\n' "$CTF_LAB_DOMAIN" "$CTF_LAB_DNS"
+  fi
+  printf 'forward-zone:\n    name: "."\n    forward-addr: %s\n' "$UPSTREAM_DNS"
+} > "$UB_CONF"
+
+DNS_OK=0
+if unbound -c "$UB_CONF" 2>>"$UB_LOG"; then
+  DNS_OK=1; log "unbound up on $DNS_ADDR (lab='${CTF_LAB_DOMAIN:-none}' upstream=$UPSTREAM_DNS)"
+else
+  log "warn: unbound failed (see $UB_LOG) — falling back to upstream DNS directly"
+fi
+
+SESSION_HOSTS="$CTF_RUNTIME/hosts"
+if [[ ! -f "$SESSION_HOSTS" ]]; then
+  { cat /etc/hosts 2>/dev/null || printf '127.0.0.1 localhost\n::1 localhost\n'
+    printf '\n# >>> room-enter addhost (managed) >>>\n# <<< room-enter addhost (managed) <<<\n'
+  } > "$SESSION_HOSTS"
+fi
+mount --bind "$SESSION_HOSTS" /etc/hosts 2>/dev/null \
+  || log "warn: could not bind-mount /etc/hosts — addhost static maps inactive"
+
+RESOLV="$CTF_RUNTIME/resolv.conf"
+if [[ "$DNS_OK" == 1 ]]; then
+  printf '# room-enter session DNS\nnameserver %s\noptions edns0\n' "$DNS_ADDR" > "$RESOLV"
+else
+  printf '# room-enter session DNS (unbound failed)\nnameserver %s\noptions edns0\n' "$UPSTREAM_DNS" > "$RESOLV"
+fi
+mount --bind "$RESOLV" /etc/resolv.conf 2>/dev/null || log "warn: could not bind-mount resolv.conf"
+
+# ---------------------------------------------------------------------------
+# 6. Hold the namespace open. Cleanup trap tears the tunnel + DNS down on exit.
+# ---------------------------------------------------------------------------
+: "${CTF_READY_FILE:=$CTF_RUNTIME/ready}"
+cleanup() {
+  [[ -n "${TUN_PID:-}" ]] && kill "$TUN_PID" 2>/dev/null || true
+  [[ -f "$UB_PID" ]] && kill "$(cat "$UB_PID" 2>/dev/null)" 2>/dev/null || true
+  rm -f "$RESOLV" "$UB_PID" "$UB_CONF" "$CTF_RUNTIME/openvpn.pid"
+}
+trap 'cleanup; rm -f "$CTF_READY_FILE"; exit 0' TERM INT
+trap 'cleanup; rm -f "$CTF_READY_FILE"' EXIT
+
+: > "$CTF_READY_FILE"
+log "ready — tunnel $IFACE up, DNS on $DNS_ADDR. Holding namespace."
+while true; do sleep 86400 & wait $!; done

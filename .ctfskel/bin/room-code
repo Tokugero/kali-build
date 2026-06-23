@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# room-code — launch VS Code inside the room's network namespace, so its
+# integrated terminal, tasks, debuggers, and extension traffic egress through
+# the engagement VPN and resolve target hostnames via the room resolver. Run it
+# from a room shell (after `room-enter`).
+#
+# Uses a per-room --user-data-dir so it's a SEPARATE instance bound to the netns
+# — a plain `code` would hand the window off to your host VS Code (→ host
+# network). Your normal extensions are still used (shared --extensions-dir).
+#
+#   room-code [path ...]     (defaults to opening the room dir)
+#
+# The Electron sandbox is disabled by default because its nested-userns zygote
+# is unreliable inside the room's user namespace; set CTF_CODE_SANDBOX=1 to
+# force it back on.
+
+set -euo pipefail
+
+die() { echo "room-code: $*" >&2; exit 1; }
+
+[[ -n "${CTF_RUNTIME:-}" && -n "${ROOM_ROOT:-}" ]] || die "not in a room — run from a room shell after 'room-enter'"
+if [[ "${CTF_LAYER:-1}" != 2 ]]; then
+  echo "room-code: warning — not inside the VPN netns (CTF_LAYER!=2); the editor would use your HOST network. Run 'room-enter' first." >&2
+fi
+
+CODE=""
+for c in code codium code-insiders cursor; do
+  command -v "$c" >/dev/null 2>&1 && { CODE="$c"; break; }
+done
+[[ -n "$CODE" ]] || die "no VS Code binary found on PATH (code/codium/code-insiders/cursor)"
+
+datadir="$ROOM_ROOT/.vscode"
+mkdir -p "$datadir"
+
+# Default to the no-sandbox flag (Electron's nested-userns sandbox often fails
+# to start inside the room userns); CTF_CODE_SANDBOX=1 opts back in.
+sandbox=(--no-sandbox)
+[[ "${CTF_CODE_SANDBOX:-0}" == 1 ]] && sandbox=()
+
+args=("$@"); [[ ${#args[@]} -eq 0 ]] && args=("$ROOM_ROOT")
+
+echo "[room-code] $CODE — netns instance, user-data-dir $datadir" >&2
+"$CODE" --user-data-dir="$datadir" --new-window "${sandbox[@]}" "${args[@]}" &
+disown
+echo "[room-code] launched (pid $!). Its integrated terminal + tasks run in the room netns." >&2

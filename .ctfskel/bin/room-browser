@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# room-browser — launch a browser INSIDE the room's network namespace, so its
+# traffic egresses through the engagement VPN and it resolves target hostnames
+# via the room resolver (addhost / unbound). Run it from a room shell (after
+# `room-enter`).
+#
+# It always starts a SEPARATE instance:
+#   - Firefox  : --no-remote + a per-room --profile  (so a URL isn't handed to
+#                your host Firefox), and DoH pre-disabled (else Firefox resolves
+#                names itself and bypasses the namespace DNS).
+#   - Chromium/Brave : --user-data-dir (a fresh instance; uses the OS resolver).
+#
+#   room-browser [firefox|chromium|brave] [url ...]
+#
+# Default browser: firefox, else chromium, else brave (first found).
+# Profiles persist under $ROOM_ROOT/.browser (gitignored) so box logins survive
+# room re-entry. If Chromium's nested-userns sandbox fails, set
+# CTF_BROWSER_NOSANDBOX=1.
+
+set -euo pipefail
+
+die() { echo "room-browser: $*" >&2; exit 1; }
+
+[[ -n "${CTF_RUNTIME:-}" && -n "${ROOM_ROOT:-}" ]] || die "not in a room — run from a room shell after 'room-enter'"
+if [[ "${CTF_LAYER:-1}" != 2 ]]; then
+  echo "room-browser: warning — not inside the VPN netns (CTF_LAYER!=2); the browser would use your HOST network. Run 'room-enter' first." >&2
+fi
+
+# Browser selection: explicit first arg, else first available.
+BROWSER=""
+case "${1:-}" in
+  firefox|chromium|chromium-browser|brave) BROWSER="$1"; shift ;;
+esac
+if [[ -z "$BROWSER" ]]; then
+  for b in firefox chromium brave; do
+    command -v "$b" >/dev/null 2>&1 && { BROWSER="$b"; break; }
+  done
+fi
+[[ -n "$BROWSER" ]] || die "no browser found on PATH (firefox/chromium/brave)"
+command -v "$BROWSER" >/dev/null 2>&1 || die "$BROWSER not on PATH"
+
+PROFILE_BASE="$ROOM_ROOT/.browser"
+mkdir -p "$PROFILE_BASE"
+
+case "$BROWSER" in
+  firefox)
+    prof="$PROFILE_BASE/firefox"
+    mkdir -p "$prof"
+    # Disable DoH so addhost / unbound names resolve via the room resolver, and
+    # quiet the first-run nags. Written every launch so it stays enforced.
+    cat > "$prof/user.js" <<'EOF'
+// room-browser: resolve via the namespace resolver, not Firefox's own DoH.
+user_pref("network.trr.mode", 5);
+user_pref("doh-rollout.disable-heuristics", true);
+user_pref("browser.aboutConfig.showWarning", false);
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("datareporting.policy.dataSubmissionEnabled", false);
+EOF
+    echo "[room-browser] firefox — netns instance, profile $prof" >&2
+    firefox --no-remote --profile "$prof" "$@" &
+    ;;
+  chromium|chromium-browser|brave)
+    datadir="$PROFILE_BASE/$BROWSER"
+    mkdir -p "$datadir"
+    sandbox=()
+    [[ "${CTF_BROWSER_NOSANDBOX:-0}" == 1 ]] && sandbox=(--no-sandbox)
+    echo "[room-browser] $BROWSER — netns instance, data-dir $datadir" >&2
+    "$BROWSER" --user-data-dir="$datadir" --no-first-run --no-default-browser-check "${sandbox[@]}" "$@" &
+    ;;
+esac
+
+disown
+echo "[room-browser] launched (pid $!). It shares this room's tunnel + DNS." >&2

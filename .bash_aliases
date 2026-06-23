@@ -121,19 +121,24 @@ extract() { #Extracts files regardless of extension, probably
     fi
   fi
 }
-startroom() { #Creates a new directory and copies the skel files into it
-    if [[ $1 ]]; then
-        room=$1
-        mkdir -p $room
-    else
-        room="room"
-    fi
-    cd $room
-    cp -r ~/.local/build/.ctfskel/* .
+startroom() { #Creates a new room from the ctf skeleton and drops you into it
+    room="${1:-room}"
+    mkdir -p "$room"
+    cd "$room" || return 1
+    # Copy the skeleton including dotfiles (.envrc, flake.nix, flake.lock,
+    # .gitignore) — the old `skel/*` glob silently skipped them. The trailing
+    # /. copies directory contents, hidden entries included.
+    cp -r ~/.local/build/.ctfskel/. .
     sed -i "s/TEMPLATE/$room/g" engagement.ipynb
-    python3 -m venv .venv
-    . .venv/bin/activate
-    pip install -r requirements.txt
+    # direnv builds the nix devShell (tunnel + tools) and the python .venv on
+    # entry; trust the .envrc once so that happens automatically on cd.
+    if command -v direnv >/dev/null 2>&1; then
+        direnv allow .
+    else
+        echo "install direnv (and hook it into your shell) to auto-load the room env"
+    fi
+    echo "Room '$room' ready. nix devShell + .venv build on first direnv load."
+    echo "Next: 'room-enter <vpn>' (e.g. room-enter htb), then 'addhost box.htb <ip>'."
 }
 nb2jekyll() {
   slug="$1"

@@ -1,0 +1,15 @@
+# Room-local state — never commit.
+.venv/
+.direnv/
+engagement_files/
+.browser/
+.vscode/
+
+# Per-host overrides (alt CTF_VPN_DIR, lab DNS, …).
+.envrc.local
+
+# VPN configs carry private keys / certs — keep them in $CTF_VPN_DIR
+# (default ~/ctf/vpn), out of the room and out of git.
+*.ovpn
+*.conf
+vpn/

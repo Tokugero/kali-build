@@ -1,0 +1,282 @@
+#!/usr/bin/env bash
+# room-enter — drop into a rootless user+net namespace whose egress is an
+# engagement VPN (OpenVPN .ovpn or WireGuard .conf). The namespace is created
+# with unshare(1) and mapped via newuidmap/newgidmap so we're uid 0 inside
+# (CAP_NET_ADMIN for the tunnel) with setgroups left "allow" (keeps zsh quiet);
+# pasta(1) joins it for host connectivity. A holder process keeps it alive so
+# multiple shells / the Jupyter notebook can join via nsenter(1). No sudo, no
+# kernel modules — only the standard setuid subid helpers.
+#
+# Subcommands:
+#   (none)|enter [name|path]   Default. Join the existing namespace if alive,
+#                              else bring one up against the named VPN config
+#                              ($CTF_VPN_DIR/<name>.{ovpn,conf}) and join.
+#   down                       Tear down tunnel + DNS + namespace.
+#   status                     Show holder / tunnel state.
+#   list                       List available VPN configs in $CTF_VPN_DIR.
+
+set -euo pipefail
+
+ROOM_ROOT="${ROOM_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+ROOM_NAME="${ROOM_NAME:-$(basename "$ROOM_ROOT")}"
+CTF_VPN_DIR="${CTF_VPN_DIR:-$HOME/ctf/vpn}"
+CTF_RUNTIME="${CTF_RUNTIME:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ctf-$ROOM_NAME}"
+INNER="$ROOM_ROOT/bin/_room-enter-inner"
+HOLDER_PID_FILE="$CTF_RUNTIME/holder.pid"
+PASTA_PID_FILE="$CTF_RUNTIME/pasta.pid"
+READY_FILE="$CTF_RUNTIME/ready"
+VPN_NAME_FILE="$CTF_RUNTIME/vpn.name"
+MAP_FIFO="$CTF_RUNTIME/map.fifo"
+
+die() { echo "[room-enter] $*" >&2; exit 1; }
+
+# Resolve the SETUID subid mappers. A plain copy on PATH (e.g. nixpkgs' shadow
+# under /run/current-system/sw/bin, which .envrc puts first) runs unprivileged
+# and cannot write uid_map — we must use the setuid wrapper (NixOS:
+# /run/wrappers/bin). Pick the first candidate that actually has the setuid bit.
+_find_setuid() {
+  local name="$1" c
+  for c in "/run/wrappers/bin/$name" "/usr/bin/$name" "$(command -v "$name" 2>/dev/null || true)"; do
+    [[ -n "$c" && -u "$c" ]] && { printf '%s\n' "$c"; return 0; }
+  done
+  return 1
+}
+NEWUIDMAP="$(_find_setuid newuidmap || true)"
+NEWGIDMAP="$(_find_setuid newgidmap || true)"
+
+require_bin() {
+  command -v "$1" >/dev/null 2>&1 || die "$1 not on PATH — is the room's nix devShell loaded? (cd into the room so direnv runs)"
+}
+
+preflight() {
+  require_bin pasta; require_bin openvpn; require_bin wireguard-go
+  require_bin wg; require_bin unbound; require_bin unshare; require_bin nsenter
+  [[ -n "$NEWUIDMAP" && -n "$NEWGIDMAP" ]] || die "no SETUID newuidmap/newgidmap found (need the shadow setuid helpers, e.g. /run/wrappers/bin) — rootless subid mapping requires them"
+  grep -q "^$(id -un):" /etc/subuid || die "no /etc/subuid range for $(id -un) — required for rootless setgroups=allow mapping"
+  grep -q "^$(id -un):" /etc/subgid || die "no /etc/subgid range for $(id -un) — required for rootless setgroups=allow mapping"
+}
+
+holder_pid() {
+  [[ -f "$HOLDER_PID_FILE" ]] || return 1
+  local pid; pid=$(cat "$HOLDER_PID_FILE")
+  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && echo "$pid"
+}
+
+kill_pidfile() {
+  [[ -f "$1" ]] || return 0
+  local pid; pid=$(cat "$1" 2>/dev/null)
+  [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
+}
+
+_enter_failed() {
+  echo "[room-enter] bring-up failed — cleaning up" >&2
+  [[ -n "${HOLDER:-}" ]] && kill "$HOLDER" 2>/dev/null || true
+  kill_pidfile "$PASTA_PID_FILE"
+  rm -f "$HOLDER_PID_FILE" "$READY_FILE" "$PASTA_PID_FILE" "$MAP_FIFO"
+}
+
+resolve_config() {
+  local sel="${1:-}"
+  if [[ -z "$sel" ]]; then
+    local found=() f
+    for f in "$CTF_VPN_DIR"/*.ovpn "$CTF_VPN_DIR"/*.conf; do [[ -f "$f" ]] && found+=("$f"); done
+    [[ ${#found[@]} -eq 1 ]] || die "specify a config: 'room-enter <name>' (see 'room-enter list'). Found ${#found[@]} in $CTF_VPN_DIR"
+    printf '%s\n' "${found[0]}"; return
+  fi
+  [[ -f "$sel" ]] && { printf '%s\n' "$sel"; return; }
+  local ext
+  for ext in ovpn conf; do
+    [[ -f "$CTF_VPN_DIR/$sel.$ext" ]] && { printf '%s\n' "$CTF_VPN_DIR/$sel.$ext"; return; }
+  done
+  die "no VPN config '$sel' — looked for $CTF_VPN_DIR/$sel.{ovpn,conf} and an explicit path. 'room-enter list' to see options."
+}
+
+ns_join() {
+  local pid="$1"
+  local ROOM_SHELL
+  ROOM_SHELL=$(command -v zsh 2>/dev/null) || ROOM_SHELL="${SHELL:-/bin/sh}"
+  local TRUE_BIN; TRUE_BIN=$(type -P true); [[ -n "$TRUE_BIN" ]] || die "no 'true' binary on PATH"
+
+  # Probe the join. No --pid: the namespace has no pid namespace (we don't need
+  # pid isolation for a CTF room, and joining the init pid ns would EPERM).
+  # --preserve-credentials: don't reset uid/gid (we map to 0 inside ourselves).
+  local err
+  if ! err=$(nsenter --target "$pid" --preserve-credentials --user --net --mount --uts -- "$TRUE_BIN" 2>&1); then
+    echo "[room-enter] nsenter probe failed: $err" >&2
+    echo "[room-enter] tearing down orphan namespace (holder $pid)" >&2
+    cmd_down; return 1
+  fi
+
+  local vpn_name="?"; [[ -f "$VPN_NAME_FILE" ]] && vpn_name=$(cat "$VPN_NAME_FILE")
+  cat <<EOF
+
+╭─ ctf room: $ROOM_NAME ─ layer 2 ─ egress via VPN ($vpn_name) ──────────────╮
+  Tunnel up. Target-facing tools (nmap, rustscan, ffuf, nuclei, netexec,
+  evil-winrm, curl, jupyter, …) now egress through the VPN.
+
+  Set targets    addhost box.htb 10.129.10.5   (live for shell + notebook)
+                 addhost -l                     list   addhost -d box.htb  remove
+  Inspect        room-enter status              tunnel + routes
+  Notebook       jupyter lab                    run from here so it inherits the tunnel
+  Leave          exit                           namespace persists for other terminals
+                 room-enter down                tear it all down
+╰───────────────────────────────────────────────────────────────────────────╯
+
+EOF
+  exec nsenter \
+    --target "$pid" \
+    --preserve-credentials \
+    --user --net --mount --uts \
+    --wd="$ROOM_ROOT" \
+    -- env \
+      -u DIRENV_DIFF -u DIRENV_DIR -u DIRENV_FILE -u DIRENV_WATCHES -u DIRENV_DEFAULT_TONE \
+      CTF_ROOM=1 CTF_LAYER=2 \
+      ROOM_ROOT="$ROOM_ROOT" ROOM_NAME="$ROOM_NAME" \
+      CTF_RUNTIME="$CTF_RUNTIME" CTF_VPN_DIR="$CTF_VPN_DIR" CTF_VPN_NAME="$vpn_name" \
+      HOSTNAME="ctf-$ROOM_NAME" SHELL="$ROOM_SHELL" \
+      PATH="$ROOM_ROOT/bin:$PATH" \
+      "$ROOM_SHELL" -i
+}
+
+cmd_enter() {
+  [[ "${CTF_LAYER:-1}" == 2 ]] && die "already inside a room netns shell"
+
+  local pid
+  if pid=$(holder_pid); then
+    echo "[room-enter] joining existing namespace (holder pid $pid)" >&2
+    ns_join "$pid"
+  fi
+
+  local config; config=$(resolve_config "${1:-}")
+  local vpn_name; vpn_name=$(basename "$config"); vpn_name="${vpn_name%.*}"
+  echo "[room-enter] using VPN config: $config" >&2
+
+  [[ -x "$INNER" ]] || die "missing inner helper: $INNER"
+  preflight
+
+  mkdir -p "$CTF_RUNTIME"; chmod 700 "$CTF_RUNTIME"
+  rm -f "$HOLDER_PID_FILE" "$READY_FILE" "$PASTA_PID_FILE" "$MAP_FIFO"
+  printf '%s\n' "$vpn_name" > "$VPN_NAME_FILE"
+  mkfifo -m 600 "$MAP_FIFO"
+
+  local SETUP_LOG="$CTF_RUNTIME/setup.log"
+  echo "[room-enter] creating namespace + tunnel + dns (log: $SETUP_LOG)" >&2
+
+  # 1. Create the user+net+mount+uts namespace. The inner blocks on MAP_FIFO
+  #    until we install the uid/gid map below.
+  ( exec unshare --user --net --mount --uts --propagation private -- \
+      env CTF_LAYER=2 ROOM_ROOT="$ROOM_ROOT" ROOM_NAME="$ROOM_NAME" \
+          CTF_RUNTIME="$CTF_RUNTIME" CTF_VPN_CONFIG="$config" CTF_VPN_NAME="$vpn_name" \
+          CTF_READY_FILE="$READY_FILE" CTF_MAP_FIFO="$MAP_FIFO" \
+          CTF_LAB_DOMAIN="${CTF_LAB_DOMAIN:-}" CTF_LAB_DNS="${CTF_LAB_DNS:-}" \
+          "$INNER"
+  ) >"$SETUP_LOG" 2>&1 </dev/null &
+  HOLDER=$!
+  disown
+
+  trap _enter_failed EXIT
+
+  # 2. Wait for the userns to exist, then map inside-0 -> us + our subid range,
+  #    via the setuid helpers (this keeps setgroups "allow").
+  for _ in $(seq 1 100); do
+    [[ -e /proc/$HOLDER/uid_map ]] && break
+    kill -0 "$HOLDER" 2>/dev/null || { tail -20 "$SETUP_LOG" >&2; die "namespace process exited early — see $SETUP_LOG"; }
+    sleep 0.05
+  done
+  [[ -e /proc/$HOLDER/uid_map ]] || die "user namespace never appeared — see $SETUP_LOG"
+
+  local su sg sub_uid_base sub_uid_cnt sub_gid_base sub_gid_cnt
+  su=$(awk -F: -v u="$(id -un)" '$1==u{print $2" "$3; exit}' /etc/subuid)
+  sg=$(awk -F: -v u="$(id -un)" '$1==u{print $2" "$3; exit}' /etc/subgid)
+  read -r sub_uid_base sub_uid_cnt <<<"$su"
+  read -r sub_gid_base sub_gid_cnt <<<"$sg"
+  "$NEWUIDMAP" "$HOLDER" 0 "$(id -u)" 1 1 "$sub_uid_base" "$sub_uid_cnt" || die "newuidmap failed"
+  "$NEWGIDMAP" "$HOLDER" 0 "$(id -g)" 1 1 "$sub_gid_base" "$sub_gid_cnt" || die "newgidmap failed"
+
+  # 3. Join pasta to the netns for connectivity (it runs as a sidecar).
+  pasta --config-net --quiet "$HOLDER" >>"$SETUP_LOG" 2>&1 &
+  local PASTA=$!
+  disown
+  echo "$PASTA" > "$PASTA_PID_FILE"
+
+  # 4. Release the inner; it waits for connectivity, then brings up the tunnel.
+  echo go > "$MAP_FIFO"
+
+  # 5. Wait for the inner to finish tunnel + DNS setup.
+  for _ in $(seq 1 400); do
+    [[ -f "$READY_FILE" ]] && break
+    kill -0 "$HOLDER" 2>/dev/null || { tail -40 "$SETUP_LOG" >&2; die "namespace setup exited before ready — see $SETUP_LOG"; }
+    sleep 0.1
+  done
+  [[ -f "$READY_FILE" ]] || { tail -40 "$SETUP_LOG" >&2; die "tunnel didn't come up in time — see $SETUP_LOG"; }
+
+  echo "$HOLDER" > "$HOLDER_PID_FILE"
+  rm -f "$MAP_FIFO"
+  trap - EXIT
+  ns_join "$HOLDER"
+}
+
+cmd_down() {
+  local pid
+  if pid=$(holder_pid); then
+    echo "[room-enter] killing holder $pid" >&2
+    kill "$pid" 2>/dev/null || true
+    for _ in $(seq 1 15); do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
+  fi
+  # pasta joined the netns, so it keeps the namespace alive — kill it too.
+  kill_pidfile "$PASTA_PID_FILE"
+  # Belt-and-suspenders: sweep any tunnel/DNS helpers tagged with this room's
+  # runtime path (catches a crashed run, or a room created by the old model).
+  local orphans
+  orphans=$(pgrep -f "openvpn .*${CTF_RUNTIME}|unbound -c ${CTF_RUNTIME}" 2>/dev/null) || true
+  if [[ -n "$orphans" ]]; then
+    echo "$orphans" | xargs -r kill 2>/dev/null || true
+    sleep 0.3
+    echo "$orphans" | xargs -r kill -9 2>/dev/null || true
+  fi
+  rm -f "$HOLDER_PID_FILE" "$READY_FILE" "$PASTA_PID_FILE" "$VPN_NAME_FILE" "$MAP_FIFO"
+  echo "[room-enter] namespace down" >&2
+}
+
+cmd_status() {
+  if [[ "${CTF_LAYER:-1}" == 2 ]]; then
+    echo "inside room shell  [yes]  vpn=${CTF_VPN_NAME:-?}  (uid $(id -u))"
+    local ifc
+    for ifc in tun0 wg0; do
+      if ip link show "$ifc" &>/dev/null; then
+        echo "$ifc interface     [present]"
+        ip -o -4 addr show "$ifc" 2>/dev/null | awk '{print "  addr: "$4}'
+      fi
+    done
+    echo "default route:"; ip route show default | sed 's/^/  /'
+    return 0
+  fi
+  local pid
+  if pid=$(holder_pid); then
+    echo "namespace holder   [alive] pid=$pid  vpn=$([[ -f "$VPN_NAME_FILE" ]] && cat "$VPN_NAME_FILE" || echo '?')"
+    echo "run 'room-enter' to join, 'room-enter down' to tear down"
+  else
+    echo "namespace holder   [absent] — run 'room-enter <name>' to create+join"
+  fi
+}
+
+cmd_list() {
+  echo "VPN configs in $CTF_VPN_DIR:"
+  local f any=0
+  for f in "$CTF_VPN_DIR"/*.ovpn "$CTF_VPN_DIR"/*.conf; do
+    [[ -f "$f" ]] || continue
+    local n; n=$(basename "$f"); printf '  %-24s (%s)\n' "${n%.*}" "$n"; any=1
+  done
+  [[ "$any" == 1 ]] || echo "  (none — drop <name>.ovpn or <name>.conf here)"
+}
+
+usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+
+case "${1:-enter}" in
+  enter|up)       shift || true; cmd_enter "${1:-}" ;;
+  down)           cmd_down ;;
+  status)         cmd_status ;;
+  list)           cmd_list ;;
+  -h|--help|help) usage ;;
+  *)              cmd_enter "$1" ;;
+esac
