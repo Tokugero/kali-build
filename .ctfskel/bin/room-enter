@@ -30,19 +30,28 @@ MAP_FIFO="$CTF_RUNTIME/map.fifo"
 
 die() { echo "[room-enter] $*" >&2; exit 1; }
 
-# Resolve the SETUID subid mappers. A plain copy on PATH (e.g. nixpkgs' shadow
-# under /run/current-system/sw/bin, which .envrc puts first) runs unprivileged
-# and cannot write uid_map — we must use the setuid wrapper (NixOS:
-# /run/wrappers/bin). Pick the first candidate that actually has the setuid bit.
-_find_setuid() {
-  local name="$1" c
+# Resolve the privileged subid mappers. A plain copy on PATH (e.g. nixpkgs'
+# shadow under /run/current-system/sw/bin, which .envrc puts first) runs
+# unprivileged and cannot write uid_map — we must use the privileged wrapper
+# (NixOS: /run/wrappers/bin). That privilege may come from the setuid bit OR,
+# on modern NixOS, from file capabilities (cap_setuid on newuidmap, cap_setgid
+# on newgidmap) with the setuid bit left off — accept either.
+_is_privileged_mapper() {
+  local c="$1" cap="$2"
+  [[ -n "$c" && -e "$c" ]] || return 1
+  [[ -u "$c" ]] && return 0
+  command -v getcap >/dev/null 2>&1 && getcap "$c" 2>/dev/null | grep -q "$cap" && return 0
+  return 1
+}
+_find_mapper() {
+  local name="$1" cap="$2" c
   for c in "/run/wrappers/bin/$name" "/usr/bin/$name" "$(command -v "$name" 2>/dev/null || true)"; do
-    [[ -n "$c" && -u "$c" ]] && { printf '%s\n' "$c"; return 0; }
+    _is_privileged_mapper "$c" "$cap" && { printf '%s\n' "$c"; return 0; }
   done
   return 1
 }
-NEWUIDMAP="$(_find_setuid newuidmap || true)"
-NEWGIDMAP="$(_find_setuid newgidmap || true)"
+NEWUIDMAP="$(_find_mapper newuidmap cap_setuid || true)"
+NEWGIDMAP="$(_find_mapper newgidmap cap_setgid || true)"
 
 require_bin() {
   command -v "$1" >/dev/null 2>&1 || die "$1 not on PATH — is the room's nix devShell loaded? (cd into the room so direnv runs)"
@@ -51,7 +60,7 @@ require_bin() {
 preflight() {
   require_bin pasta; require_bin openvpn; require_bin wireguard-go
   require_bin wg; require_bin unbound; require_bin unshare; require_bin nsenter
-  [[ -n "$NEWUIDMAP" && -n "$NEWGIDMAP" ]] || die "no SETUID newuidmap/newgidmap found (need the shadow setuid helpers, e.g. /run/wrappers/bin) — rootless subid mapping requires them"
+  [[ -n "$NEWUIDMAP" && -n "$NEWGIDMAP" ]] || die "no privileged newuidmap/newgidmap found (need the shadow helpers with setuid or cap_setuid/cap_setgid, e.g. /run/wrappers/bin) — rootless subid mapping requires them"
   grep -q "^$(id -un):" /etc/subuid || die "no /etc/subuid range for $(id -un) — required for rootless setgroups=allow mapping"
   grep -q "^$(id -un):" /etc/subgid || die "no /etc/subgid range for $(id -un) — required for rootless setgroups=allow mapping"
 }

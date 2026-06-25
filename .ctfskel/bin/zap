@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# zap — launch OWASP ZAP from inside the room with a writable JVM home.
+#
+# Inside the VPN netns we run as uid 0 (mapped to the real user). The JVM
+# derives `user.home` from getpwuid(euid) — i.e. /root — and IGNORES $HOME,
+# so java.util.prefs tries to lock /root/.java/.userPrefs, hits EACCES, and
+# ZAP aborts ("Could not lock User prefs"). Pin user.home at our real,
+# writable $HOME; ZAP's own data still lands in $HOME/.ZAP (shared across
+# rooms, add-ons persist). Outside a room this is a harmless no-op redirect.
+set -euo pipefail
+
+export JAVA_TOOL_OPTIONS="-Duser.home=$HOME ${JAVA_TOOL_OPTIONS:-}"
+
+# Resolve the real zap, skipping this wrapper's own dir to avoid recursion
+# (room-enter prepends $ROOM_ROOT/bin to PATH, so 'zap' would find us first).
+self_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+real=""
+IFS=: read -ra _path <<<"$PATH"
+for d in "${_path[@]}"; do
+  [[ "$d" == "$self_dir" ]] && continue
+  if [[ -x "$d/zap" ]]; then real="$d/zap"; break; fi
+done
+[[ -n "$real" ]] || { echo "zap: no real 'zap' found on PATH (install zaproxy)" >&2; exit 1; }
+
+exec "$real" "$@"

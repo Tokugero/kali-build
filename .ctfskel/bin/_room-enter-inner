@@ -45,6 +45,25 @@ ip route show default 2>/dev/null | grep -q . || die "no connectivity — pasta 
 if [[ -d /run/nscd ]]; then mount -t tmpfs tmpfs /run/nscd 2>/dev/null || true; fi
 if [[ -d /var/run/nscd && ! -L /var/run ]]; then mount -t tmpfs tmpfs /var/run/nscd 2>/dev/null || true; fi
 
+# Make ssh/scp/sftp usable inside the rootless userns. The host's system
+# ssh_config (/etc/ssh/ssh_config) Includes files under /nix/store owned by
+# host uid 0 (e.g. libvirt's 30-libvirt-ssh-proxy.conf). Host root isn't mapped
+# into our userns, so those files appear owned by the overflow 'nobody' uid, and
+# OpenSSH's Include permission check (owner must be root or you) fatals with
+#   Bad owner or permissions on /nix/store/...-ssh-proxy.conf
+# before any connection. Shadow a sanitized copy with the unresolvable nix-store
+# Includes stripped; the copy lives in $CTF_RUNTIME so inside the ns it's owned
+# by root (inside-0) and passes the check. Same bind-mount trick as /etc/hosts;
+# host config is untouched (private mount namespace).
+if [[ -f /etc/ssh/ssh_config ]] && grep -qiE '^[[:space:]]*include[[:space:]].*/nix/store/' /etc/ssh/ssh_config; then
+  SSH_CONF="$CTF_RUNTIME/ssh_config"
+  grep -ivE '^[[:space:]]*include[[:space:]].*/nix/store/' /etc/ssh/ssh_config > "$SSH_CONF" 2>/dev/null || true
+  chmod 644 "$SSH_CONF"
+  mount --bind "$SSH_CONF" /etc/ssh/ssh_config 2>/dev/null \
+    && log "sanitized /etc/ssh/ssh_config (stripped nix-store Includes for rootless ssh)" \
+    || log "warn: could not shadow /etc/ssh/ssh_config — ssh may report 'Bad owner or permissions'"
+fi
+
 # 3. Capture pasta's gateway + the upstream resolver before we touch routing or
 #    resolv.conf. pasta proxies DNS sent to the host's resolver, so unbound
 #    forwards "." there.
