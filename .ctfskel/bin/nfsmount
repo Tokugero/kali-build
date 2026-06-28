@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# nfsmount — mount an NFS export INSIDE the room netns via fuse-nfs, so the
+# traffic egresses through the engagement VPN. The in-kernel NFS client can't
+# be used here: `nfs` is not FS_USERNS_MOUNT, so `mount -t nfs` EPERMs even as
+# the room's (mapped) uid 0. fuse-nfs talks NFS in userspace and presents it as
+# a FUSE mount, which IS allowed in a user namespace — libfuse mounts via the
+# direct mount(2) syscall because we hold CAP_SYS_ADMIN over our own mount ns
+# (no fusermount setuid helper needed). Run it from a room shell after
+# `room-enter`.
+#
+#   nfsmount <export> [mountpoint]   mount nfs://host/export (default mp:
+#                                    $ROOM_ROOT/mnt/<host>__<export>, gitignored)
+#   nfsmount -u <mountpoint>         unmount
+#   nfsmount -l                      list active fuse-nfs mounts
+#
+# <export> accepts either an nfs URL or the classic showmount form:
+#   nfs://10.129.10.5/srv/share      10.129.10.5:/srv/share      (equivalent)
+#
+# Options:
+#   -r            authenticate to the server as root and present files as root
+#                 (appends ?uid=0&gid=0 + fuse-nfs -U 0 -G 0). Use against
+#                 no_root_squash exports or 0600 files owned by uid 0.
+#   --            pass any following args straight to fuse-nfs (it uses its own
+#                 flags, NOT `-o key=val` — e.g. -a allow_other, -D debug,
+#                 -R max_read; run `fuse-nfs` with no args for the full list).
+#
+# Read-only is governed by the export itself; fuse-nfs has no ro flag.
+#
+# Examples:
+#   nfsmount 10.129.10.5:/srv/share
+#   nfsmount -r nfs://10.129.10.5/home/admin
+#   nfsmount -u mnt/10.129.10.5__srv_share
+
+set -euo pipefail
+
+die() { echo "nfsmount: $*" >&2; exit 1; }
+
+# ---- unmount -------------------------------------------------------------
+unmount() {
+  local mp="${1:-}"; [[ -n "$mp" ]] || die "usage: nfsmount -u <mountpoint>"
+  [[ -d "$mp" ]] || die "no such mountpoint: $mp"
+  # Inside the userns we're root over our mount ns, so any of these works;
+  # try the libfuse helpers first (clean fuse teardown), then a plain umount.
+  if   command -v fusermount3 >/dev/null 2>&1 && fusermount3 -u "$mp" 2>/dev/null; then :
+  elif command -v fusermount  >/dev/null 2>&1 && fusermount  -u "$mp" 2>/dev/null; then :
+  elif umount "$mp" 2>/dev/null; then :
+  else die "could not unmount $mp (is it mounted? 'nfsmount -l' to check)"; fi
+  echo "[nfsmount] unmounted $mp" >&2
+}
+
+# ---- list ----------------------------------------------------------------
+list() {
+  # fuse-nfs shows up as fstype 'fuse' with source 'fuse-nfs' in mountinfo.
+  if grep -qE ' fuse(\.fuse-nfs)? .*fuse-nfs' /proc/self/mountinfo 2>/dev/null; then
+    awk '$0 ~ /fuse-nfs/ {for(i=1;i<=NF;i++) if($i=="-"){print "  "$5"  ("$(i+2)")"; break}}' \
+      /proc/self/mountinfo
+  else
+    echo "  (no fuse-nfs mounts)"
+  fi
+}
+
+case "${1:-}" in
+  -u|--umount|--unmount) shift; unmount "${1:-}"; exit 0 ;;
+  -l|--list)             list; exit 0 ;;
+  -h|--help)             sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+
+# ---- mount ---------------------------------------------------------------
+command -v fuse-nfs >/dev/null 2>&1 || die "fuse-nfs not on PATH — add it to the flake's netTools and re-enter the room (direnv reload)"
+[[ -n "${CTF_RUNTIME:-}" && -n "${ROOM_ROOT:-}" ]] || die "not in a room — run from a room shell after 'room-enter'"
+if [[ "${CTF_LAYER:-1}" != 2 ]]; then
+  echo "nfsmount: warning — not inside the VPN netns (CTF_LAYER!=2); this would reach the NFS server over your HOST network. Run 'room-enter' first." >&2
+fi
+# FUSE needs the device node; it comes from the host /dev (the room inherits it).
+[[ -e /dev/fuse ]] || die "/dev/fuse missing — the host kernel's fuse module isn't loaded (modprobe fuse on the host)"
+
+ROOT_SQUASH_BYPASS=0
+EXTRA=()
+EXPORT=""
+MP=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -r|--root)  ROOT_SQUASH_BYPASS=1; shift ;;
+    --)         shift; EXTRA=("$@"); break ;;
+    -*)         die "unknown flag: $1 (see 'nfsmount -h')" ;;
+    *)          if [[ -z "$EXPORT" ]]; then EXPORT="$1"; elif [[ -z "$MP" ]]; then MP="$1"; else die "too many args"; fi; shift ;;
+  esac
+done
+[[ -n "$EXPORT" ]] || die "usage: nfsmount <export> [mountpoint]  (see 'nfsmount -h')"
+
+# Normalize host:/path -> nfs://host/path; leave an existing nfs:// URL alone.
+URL="$EXPORT"
+if [[ "$URL" != nfs://* ]]; then
+  [[ "$URL" == *:/* ]] || die "export must be 'nfs://host/path' or 'host:/path' (got: $EXPORT)"
+  URL="nfs://${URL%%:/*}/${URL#*:/}"
+fi
+
+# Default mountpoint: $ROOM_ROOT/mnt/<host>__<path-with-slashes-flattened>.
+if [[ -z "$MP" ]]; then
+  rest="${URL#nfs://}"; rest="${rest%%\?*}"        # strip scheme + any query
+  host="${rest%%/*}"; path="${rest#*/}"
+  MP="$ROOM_ROOT/mnt/${host}__${path//\//_}"
+fi
+
+# Root-squash bypass: tell libnfs to auth as 0:0 and present files as root.
+if [[ "$ROOT_SQUASH_BYPASS" == 1 ]]; then
+  if [[ "$URL" == *\?* ]]; then URL="$URL&uid=0&gid=0"; else URL="$URL?uid=0&gid=0"; fi
+  EXTRA=(-U 0 -G 0 "${EXTRA[@]}")
+fi
+
+mkdir -p "$MP"
+echo "[nfsmount] mounting $URL -> $MP" >&2
+# fuse-nfs daemonizes (libfuse forks) once the mount is established.
+if ! fuse-nfs -n "$URL" -m "$MP" "${EXTRA[@]}"; then
+  rmdir "$MP" 2>/dev/null || true
+  die "fuse-nfs failed to mount $URL (check the export path with 'nfs-ls $URL', reachability with 'nmap -p2049 ${URL#nfs://}', and that the VPN is up)"
+fi
+
+# Confirm the mount actually took before declaring success.
+for _ in $(seq 1 20); do
+  grep -qF " $MP " /proc/self/mountinfo && { echo "[nfsmount] mounted. Browse: $MP   Unmount: nfsmount -u $MP" >&2; exit 0; }
+  sleep 0.1
+done
+echo "[nfsmount] warning: fuse-nfs returned but $MP isn't in mountinfo yet — check 'nfsmount -l'" >&2

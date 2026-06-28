@@ -3,7 +3,11 @@
 .direnv/
 engagement_files/
 .browser/
-.vscode/
+mnt/
+
+# Local VS Code state, except the shared extension recommendations.
+.vscode/*
+!.vscode/extensions.json
 
 # Per-host overrides (alt CTF_VPN_DIR, lab DNS, …).
 .envrc.local

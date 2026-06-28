@@ -1,0 +1,7 @@
+{
+  // Recommended when opening this engagement room in VS Code.
+  // tomoki1207.pdf — view PDFs (loot, reports, exfil'd docs) in-editor.
+  "recommendations": [
+    "tomoki1207.pdf"
+  ]
+}

@@ -17,6 +17,24 @@
             builtins.elem (nixpkgs.lib.getName pkg) [ "wpscan" ];
         };
 
+        # fuse-nfs isn't in nixpkgs (only libnfs + NFS *servers*), so build it
+        # from source. It's a small FUSE-2 wrapper over libnfs: mount an nfs://
+        # export in userspace, which — unlike the kernel nfs client — is allowed
+        # inside the room's rootless user namespace. Pinned to upstream HEAD
+        # (no tagged releases). `nfsmount` (bin/) drives it.
+        fuse-nfs = pkgs.stdenv.mkDerivation {
+          pname = "fuse-nfs";
+          version = "1.0.0-unstable-2025-02-25";
+          src = pkgs.fetchFromGitHub {
+            owner = "sahlberg";
+            repo = "fuse-nfs";
+            rev = "75827244f1615be20da880cbc68665416131088d";
+            hash = "sha256-QmsC0FLbSHko9Pfe6Nk2p1xyViUbqY6lCiGgn1J1KeA=";
+          };
+          nativeBuildInputs = with pkgs; [ autoreconfHook pkg-config ];
+          buildInputs = with pkgs; [ fuse libnfs ];
+        };
+
         # Rootless tunnel stack. pasta(1) bridges an unprivileged user+net
         # namespace to host networking; openvpn / wireguard-go provide the
         # egress TUN inside it; unbound is the split-DNS resolver (dnsmasq
@@ -69,6 +87,13 @@
           curl
           wget
           jq
+          # NFS over the tunnel without a kernel mount: the in-kernel nfs client
+          # isn't FS_USERNS_MOUNT, so `mount -t nfs` EPERMs in the rootless
+          # netns. libnfs talks NFS in userspace (nfs-ls / nfs-cp, no mount);
+          # fuse-nfs (built above) presents an nfs:// export as a FUSE mount
+          # (FUSE *is* userns-mountable). `nfsmount` wraps fuse-nfs for the room.
+          libnfs
+          fuse-nfs
         ];
 
         # Python: base interpreter + AD/exploit libs available on PATH
@@ -86,7 +111,8 @@
 
         # Wordlists. The notebook calls `$(wordlists_path)/seclists/...`;
         # seclists installs its tree at $out/share/wordlists/seclists, so the
-        # shim prints that parent dir. Add pkgs.wordlists for rockyou et al.
+        # shim prints that parent dir. seclists ships rockyou as a .tar.gz under
+        # Passwords/Leaked-Databases — zcat it out when needed.
         wordlistTools = with pkgs; [
           seclists
           (writeShellScriptBin "wordlists_path" ''
