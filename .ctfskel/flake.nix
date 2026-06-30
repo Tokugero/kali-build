@@ -53,6 +53,39 @@
           getent             # getent for endpoint resolution
         ];
 
+        # evil-winrm is broken under Ruby 3.4 in nixpkgs: winrm-fs does
+        # `require 'csv'` at load time, but Ruby 3.4 dropped csv from the
+        # default gems and the package's Gemfile.lock never declared it, so it
+        # dies with `LoadError: cannot load such file -- csv` before doing
+        # anything. The package's bundlerEnv wrappedRuby hard-sets GEM_PATH to
+        # the (csv-less) gemset, so an outer GEM_PATH override is clobbered.
+        # Run the gem script through the base ruby instead — which still ships
+        # csv as a bundled gem — with GEM_PATH spanning both the upstream
+        # evil-winrm gemset (winrm, winrm-fs, …) and that ruby's own gem dir
+        # (csv). The gemset is rebuilt from the same nixpkgs source files, so it
+        # is a store cache hit, not a recompile.
+        evil-winrm-fixed =
+          let
+            ruby = pkgs.ruby;
+            ewSrc = "${nixpkgs}/pkgs/by-name/ev/evil-winrm";
+            gems = pkgs.bundlerEnv {
+              name = "evil-winrm-gems";
+              gemfile = "${ewSrc}/Gemfile";
+              lockfile = "${ewSrc}/Gemfile.lock";
+              gemset = "${ewSrc}/gemset.nix";
+            };
+          in
+          pkgs.writeShellScriptBin "evil-winrm" ''
+            export GEM_PATH="${gems}/${ruby.gemPath}:${ruby}/${ruby.gemPath}"
+            # winrm's gssapi gem dlopen()s libgssapi_krb5.so.2 via FFI on
+            # connect (not at load), so it needs krb5 on the library path —
+            # otherwise auth dies with `Could not open library
+            # 'libgssapi_krb5.so.2'`. Upstream only wires this up under the
+            # sslLegacyProvider flag; do it unconditionally here.
+            export LD_LIBRARY_PATH="${pkgs.krb5.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            exec ${ruby}/bin/ruby ${pkgs.evil-winrm}/bin/evil-winrm "$@"
+          '';
+
         # Network recon / exploitation — these run as host processes INSIDE
         # the netns (launched from the joined shell), so every byte they send
         # egresses through the VPN tunnel. Offline analysis tools (mft,
@@ -77,7 +110,7 @@
           smbmap
           samba            # smbclient
           openldap         # ldapsearch
-          evil-winrm
+          evil-winrm-fixed # patched: csv shim for Ruby 3.4 (see let block)
           responder
           kerbrute
           certipy          # certipy-ad — AD CS abuse
